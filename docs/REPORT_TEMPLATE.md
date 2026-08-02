@@ -2,12 +2,12 @@
 
 ## Title
 
-Publicly accessible Git metadata at `/.git/HEAD` on `[HOST]`
+Publicly accessible Git metadata at `[URL]`
 
 ## Weakness
 
 - **CWE:** CWE-527 — Exposure of Version-Control Repository to an Unauthorized Control Sphere
-- **Category:** Sensitive metadata exposure / security misconfiguration
+- **Category:** Security misconfiguration / sensitive metadata exposure
 
 ## Asset
 
@@ -17,13 +17,13 @@ https://[HOST]
 
 ## Summary
 
-The web server exposes the Git `HEAD` metadata file without authentication. An unauthenticated request to `/.git/HEAD` returns a valid Git reference. This confirms that at least part of the repository metadata is publicly accessible.
+The web server exposes a valid Git `HEAD` metadata signature without authentication. I compared the result with a randomized missing path to reduce the possibility of a custom HTTP 200 error page.
 
-I stopped after the minimum non-destructive validation and did not download repository objects, inspect source history, use credentials, or access unrelated data.
+I stopped after the minimum non-destructive validation. I did not reconstruct the repository, enumerate Git objects, use credentials, bypass authentication, or access unrelated data.
 
 ## Steps to reproduce
 
-1. Send the following request:
+1. Send:
 
    ```http
    GET /.git/HEAD HTTP/1.1
@@ -31,58 +31,66 @@ I stopped after the minimum non-destructive validation and did not download repo
    Connection: close
    ```
 
-2. Observe the response:
+2. Observe a response such as:
 
    ```http
    HTTP/1.1 200 OK
-   Content-Type: [CONTENT-TYPE]
+   Content-Type: text/plain
 
-   ref: refs/heads/[BRANCH]
+   ref: refs/heads/main
    ```
 
-3. Confirm that the response is not a custom error page and that the hostname is in scope.
+3. Request a randomized nonexistent path and confirm that it produces a different response profile.
 
 ## Minimal command
 
 ```bash
 curl --silent --show-error --include --max-time 10 \
-  https://[HOST]/.git/HEAD
+  'https://[HOST]/.git/HEAD'
 ```
 
-## Observed impact
+## Automated evidence
 
-Confirmed:
+- Classification: `[CONFIRMED/PROBABLE]`
+- Confidence score: `[SCORE]/100`
+- HEAD signature: `[SIGNATURE]`
+- HTTP status: `[STATUS]`
+- Content type: `[CONTENT TYPE]`
+- Response length: `[LENGTH]`
+- SHA-256: `[HASH]`
+- Soft-404 similarity: `[VALUE]`
+- Additional metadata signatures: `[REDACTED SUMMARY]`
 
-- Git branch metadata is publicly readable without authentication.
+## Confirmed impact
 
-Potential, not automatically assumed:
+- Git metadata is publicly readable without authentication.
 
-- Additional repository metadata may reveal file paths, commit history, developer information, source code, or secrets if other Git files are also exposed.
+## Potential impact
 
-## Security impact statement
-
-Exposed version-control metadata can provide attackers with internal implementation details that reduce the effort required to discover additional vulnerabilities. The final severity depends on whether other repository objects are accessible and whether sensitive data exists in the repository history.
+Additional repository metadata may expose implementation details, file paths, commit history, developer information, source code, or secrets if more repository data is accessible. Do not state these as confirmed unless safely demonstrated and permitted by program policy.
 
 ## Research boundaries
 
-- No repository dump was performed.
-- No credentials, tokens, or API keys were used.
-- No authentication controls were bypassed.
-- No destructive or availability-impacting test was performed.
+- No repository dump or reconstruction.
+- No Git object enumeration.
+- No credential or secret use.
+- No authentication bypass.
+- No destructive testing.
+- No third-party redirect following.
+- No response body retained by the automated tool.
 
 ## Recommended remediation
 
 1. Remove `.git` and all version-control metadata from the production web root.
 2. Deploy only required build artifacts.
-3. Block requests to hidden version-control paths as defense in depth.
-4. Review deployment archives and backups for similar exposure.
-5. Inspect repository history for secrets and rotate any potentially exposed credential.
-6. Review access logs for requests to `/.git/` paths.
+3. Add web-server deny rules for version-control paths as defense in depth.
+4. Review archives, backups, alternate paths, and other deployments.
+5. Inspect repository history for secrets and rotate potentially exposed credentials.
+6. Review access logs for requests to `.git` paths.
 
-## Evidence
+## Evidence attachments
 
-- Timestamp: `[UTC TIMESTAMP]`
-- Request URL: `[REDACTED OR FULL IN-SCOPE URL]`
-- HTTP status: `[STATUS]`
-- Response signature: `[REDACTED MINIMAL SIGNATURE]`
-- Screenshot or request/response attachment: `[ATTACHMENT]`
+- Sanitized request and response screenshot.
+- `summary.md` excerpt.
+- Relevant `findings.csv` row.
+- Timestamp and asset scope evidence.

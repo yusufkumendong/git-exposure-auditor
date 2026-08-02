@@ -1,16 +1,22 @@
 ## Summary
 
-Describe the change and why it is needed.
+Describe the change and the problem it solves.
 
 ## Safety impact
 
-- [ ] Default request volume does not increase unexpectedly.
-- [ ] Scope handling remains explicit.
-- [ ] No repository dumping, credential use, destructive behavior, or access-control bypass was added.
-- [ ] Test data contains no real third-party secrets or unauthorized targets.
+- [ ] Scope enforcement is unchanged or stronger.
+- [ ] Default request volume is unchanged or lower.
+- [ ] No repository dumping, object reconstruction, secret use, credential testing, WAF evasion, or destructive behavior was added.
+- [ ] Output does not retain sensitive response bodies.
 
-## Validation
+## Testing
 
-- [ ] `bash -n install.sh scripts/*.sh`
-- [ ] `shellcheck install.sh scripts/*.sh` when available
-- [ ] Documentation was updated when behavior or flags changed
+- [ ] `bash -n install.sh bin/git-exposure-auditor lib/common.sh scripts/*.sh tests/*.sh`
+- [ ] `python3 -m py_compile lib/*.py tests/*.py`
+- [ ] `./tests/run-tests.sh`
+- [ ] `shellcheck` when available
+
+## Documentation
+
+- [ ] README updated when behavior changed.
+- [ ] CHANGELOG updated.

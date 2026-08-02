@@ -1,53 +1,30 @@
 #!/usr/bin/env bash
-
-# Medium level: test a user-supplied list of hosts or URLs with httpx.
-
 set -Eeuo pipefail
 
-usage() {
-  cat <<'HELP'
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+TARGETS="${1:-}"
+AUTH="${2:-}"
+OUTPUT="${3:-}"
+
+if [[ -z "$TARGETS" || "$AUTH" != "--authorized" ]]; then
+  cat >&2 <<'HELP'
 Usage:
-  ./scripts/medium.sh <targets-file> [output-file]
+  ./scripts/medium.sh <targets-file> --authorized [output-directory]
 
 Example:
-  ./scripts/medium.sh examples/targets.example.txt results/medium.txt
-
-The targets file must contain only systems you own or are explicitly authorized to test.
+  ./scripts/medium.sh examples/targets.example.txt --authorized
 HELP
-}
+  exit 2
+fi
 
-INPUT="${1:-}"
-OUTPUT="${2:-results/medium-$(date +%Y%m%d-%H%M%S).txt}"
+ARGS=(
+  --targets "$TARGETS"
+  --authorized
+  --no-discovery
+  --threads "${THREADS:-10}"
+  --rate-limit "${RATE_LIMIT:-5}"
+)
+[[ -n "$OUTPUT" ]] && ARGS+=( --output "$OUTPUT" )
+[[ -n "${PORTS:-}" ]] && ARGS+=( --ports "$PORTS" )
 
-[[ -n "$INPUT" ]] || { usage; exit 2; }
-[[ -r "$INPUT" ]] || { echo "[!] Cannot read input file: $INPUT" >&2; exit 2; }
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=common.sh
-source "$SCRIPT_DIR/common.sh"
-resolve_projectdiscovery_httpx || exit 2
-
-mkdir -p "$(dirname "$OUTPUT")"
-
-MATCHER='status_code == 200 && (contains(body, "ref: refs/heads/") || regex("^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$", trim_space(body)))'
-
-echo "[*] Running a low-rate metadata check against the supplied targets."
-: > "$OUTPUT"
-
-"$HTTPX_BIN" \
-  -l "$INPUT" \
-  -silent \
-  -nc \
-  -path '/.git/HEAD' \
-  -mdc "$MATCHER" \
-  -sc \
-  -cl \
-  -server \
-  -threads 10 \
-  -rate-limit 5 \
-  -timeout 8 \
-  -retries 1 \
-  -o "$OUTPUT"
-
-COUNT="$(wc -l < "$OUTPUT" | tr -d ' ')"
-printf '[*] High-confidence candidates: %s\n' "$COUNT"
-printf '[*] Output: %s\n' "$OUTPUT"
+exec "$ROOT_DIR/bin/git-exposure-auditor" "${ARGS[@]}"

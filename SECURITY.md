@@ -1,20 +1,36 @@
 # Security Policy
 
+## Authorized use
+
+Git Exposure Auditor is designed only for systems you own or are explicitly authorized to assess. The operator is responsible for reading and following the exact asset scope, rate limits, prohibited-testing rules, data-handling rules, and disclosure policy of every program.
+
+An `--authorized` flag is an operator acknowledgement; it cannot prove permission.
+
+## Intentional safety boundaries
+
+The project does not include:
+
+- Repository dumping or reconstruction.
+- Git object enumeration or source-code extraction.
+- Secret harvesting or credential validation.
+- Authentication or authorization bypass.
+- WAF evasion, proxy rotation, or identity hiding.
+- Denial-of-service testing or unlimited concurrency.
+- Automatic report submission.
+
+Safe confirmation reads only a bounded prefix of a small allowlist of Git metadata files, checks signatures in memory, and records metadata rather than response bodies.
+
 ## Reporting a vulnerability in this project
 
-Please do not publish a working exploit for a vulnerability in the toolkit before the maintainer has had a reasonable opportunity to investigate and release a fix.
+Do not publish a working exploit for a vulnerability in the toolkit before the maintainer has had a reasonable opportunity to investigate and release a fix.
 
-When reporting an issue, include:
+Include:
 
-- Affected script and version or commit.
-- Operating system and relevant dependency versions.
+- Affected version or commit.
+- Operating system and dependency versions.
 - Minimal reproduction steps.
 - Expected and actual behavior.
 - Security impact.
-- A suggested fix, when available.
+- A suggested fix when available.
 
-Do not include real third-party secrets, credentials, personal data, or out-of-scope target information in a public issue.
-
-## Tool scope
-
-This repository is designed only for authorized, non-destructive validation of exposed Git metadata. Requests to add automatic repository dumping, credential use, authentication bypass, denial-of-service behavior, or scope-evasion features may be rejected.
+Never include real third-party credentials, secrets, personal data, or private program scope in a public issue.

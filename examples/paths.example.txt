@@ -1,0 +1,6 @@
+# Approved application base paths only. Do not use a large brute-force wordlist.
+/
+/app
+/api
+/backend
+/staging

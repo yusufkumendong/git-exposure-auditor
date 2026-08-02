@@ -2,67 +2,104 @@
 
 set -Eeuo pipefail
 
-info() { printf '[*] %s\n' "$*"; }
-warn() { printf '[!] %s\n' "$*" >&2; }
-fail() { warn "$*"; exit 1; }
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$ROOT_DIR/lib/common.sh"
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/common.sh
-source "$SCRIPT_DIR/scripts/common.sh"
+MODE="check"
+CREATE_LINK=0
 
-command -v curl >/dev/null 2>&1 || fail "curl is required."
-command -v jq >/dev/null 2>&1 || fail "jq is required."
-command -v go >/dev/null 2>&1 || fail "Go is required to install assetfinder and anew."
+usage() {
+  cat <<'HELP'
+Usage:
+  ./install.sh [--check] [--install] [--link]
 
-GOBIN_PATH="$(go env GOBIN 2>/dev/null || true)"
-[[ -n "$GOBIN_PATH" ]] || GOBIN_PATH="$(go env GOPATH)/bin"
-mkdir -p "$GOBIN_PATH"
+Options:
+  --check     Verify dependencies only. This is the default.
+  --install   Install missing packages when supported.
+  --link      Create /usr/local/bin/git-exposure-auditor.
 
-if resolve_projectdiscovery_httpx --quiet; then
-  info "Existing ProjectDiscovery httpx detected: $HTTPX_BIN"
-else
-  info "Installing ProjectDiscovery httpx into: $GOBIN_PATH"
-  go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
-  [[ -x "$GOBIN_PATH/httpx" ]] || fail "ProjectDiscovery httpx was not created in $GOBIN_PATH."
-  ln -sfn "$GOBIN_PATH/httpx" "$GOBIN_PATH/httpx-pd"
+Kali Linux uses the package and command name httpx-toolkit for
+ProjectDiscovery httpx. The unrelated Python HTTPX CLI is not compatible.
+HELP
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --check) MODE="check"; shift ;;
+    --install) MODE="install"; shift ;;
+    --link) CREATE_LINK=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) gea_fail "Unknown option: $1" ;;
+  esac
+done
+
+install_core_apt() {
+  local sudo_cmd=()
+  if [[ "$(id -u)" -ne 0 ]]; then
+    command -v sudo >/dev/null 2>&1 || gea_fail "sudo is required for apt installation."
+    sudo_cmd=(sudo)
+  fi
+  "${sudo_cmd[@]}" apt-get update
+  "${sudo_cmd[@]}" apt-get install -y bash curl jq python3 git unzip ca-certificates golang-go httpx-toolkit
+}
+
+missing=()
+for command_name in bash curl jq python3; do
+  command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
+done
+
+if (( ${#missing[@]} > 0 )); then
+  if [[ "$MODE" == "install" ]] && command -v apt-get >/dev/null 2>&1; then
+    gea_info "Installing core dependencies with apt."
+    install_core_apt
+  else
+    gea_warn "Missing core dependencies: ${missing[*]}"
+    gea_warn "Kali/Debian: sudo apt install -y bash curl jq python3 git unzip ca-certificates"
+  fi
 fi
 
-if command -v assetfinder >/dev/null 2>&1; then
-  info "Existing assetfinder detected: $(command -v assetfinder)"
-else
-  info "Installing assetfinder into: $GOBIN_PATH"
-  go install -v github.com/tomnomnom/assetfinder@latest
+if ! gea_resolve_httpx; then
+  if [[ "$MODE" == "install" ]] && command -v apt-get >/dev/null 2>&1; then
+    gea_info "Installing Kali/Debian ProjectDiscovery package: httpx-toolkit"
+    install_core_apt
+    gea_resolve_httpx || gea_fail "ProjectDiscovery httpx is still unavailable."
+  else
+    exit 2
+  fi
 fi
 
-if command -v anew >/dev/null 2>&1; then
-  info "Existing anew detected: $(command -v anew)"
-else
-  info "Installing anew into: $GOBIN_PATH"
-  go install -v github.com/tomnomnom/anew@latest
+if ! command -v assetfinder >/dev/null 2>&1; then
+  if [[ "$MODE" == "install" ]] && command -v go >/dev/null 2>&1; then
+    gea_info "Installing assetfinder with Go."
+    go install -v github.com/tomnomnom/assetfinder@latest
+  else
+    gea_warn "assetfinder is optional but recommended for domain discovery."
+    gea_warn 'Install: go install -v github.com/tomnomnom/assetfinder@latest'
+  fi
 fi
 
-cat <<MESSAGE
+if ! command -v anew >/dev/null 2>&1; then
+  if [[ "$MODE" == "install" ]] && command -v go >/dev/null 2>&1; then
+    gea_info "Installing optional anew utility with Go."
+    go install -v github.com/tomnomnom/anew@latest
+  else
+    gea_warn "anew is optional; v2 has a built-in history workflow."
+  fi
+fi
 
-Installation completed.
+chmod +x "$ROOT_DIR/bin/git-exposure-auditor" "$ROOT_DIR/scripts"/*.sh "$ROOT_DIR/lib"/*.py "$ROOT_DIR/tests"/*.sh "$ROOT_DIR/tests"/*.py
 
-Kali Linux note:
-  ProjectDiscovery httpx may be installed as /usr/bin/httpx-toolkit.
-  Version 1.0.2 detects httpx-toolkit automatically; no symlink is required.
+if (( CREATE_LINK == 1 )); then
+  if [[ "$(id -u)" -eq 0 ]]; then
+    ln -sfn "$ROOT_DIR/bin/git-exposure-auditor" /usr/local/bin/git-exposure-auditor
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo ln -sfn "$ROOT_DIR/bin/git-exposure-auditor" /usr/local/bin/git-exposure-auditor
+  else
+    gea_fail "Root or sudo is required to create /usr/local/bin/git-exposure-auditor."
+  fi
+  gea_info "Installed command: /usr/local/bin/git-exposure-auditor"
+fi
 
-If Go-installed commands are not found, prepend the Go binary directory:
-  export PATH="$GOBIN_PATH:\$PATH"
-  hash -r
-
-Kali normally uses Zsh. To persist the path:
-  echo 'export PATH="$GOBIN_PATH:\$PATH"' >> ~/.zshrc
-  source ~/.zshrc
-
-Verify:
-  httpx-toolkit -version  # Kali package, when installed
-  "$GOBIN_PATH/httpx" -version  # Go installation, when installed
-  assetfinder --help
-  anew -h
-
-Run with an explicit binary when needed:
-  HTTPX_BIN=/usr/bin/httpx-toolkit ./scripts/hard.sh example.com
-MESSAGE
+gea_info "Dependency check completed."
+gea_info "Run: ./bin/git-exposure-auditor --help"

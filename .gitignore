@@ -1,13 +1,17 @@
-# Runtime output
+# Runtime results
 results/*
 !results/.gitkeep
 
-# Temporary files
-*.tmp
-*.log
+# Python
+__pycache__/
+*.py[cod]
+
+# Editors and operating systems
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
 
-# Editor settings
-.vscode/
-.idea/
+# Local scope files may contain private program details.
+config/scope.local.json
+*.local.json

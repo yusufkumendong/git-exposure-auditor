@@ -1,0 +1,23 @@
+{
+  "program": "example-authorized-program",
+  "authorized": true,
+  "include": [
+    "example.com",
+    "*.example.com"
+  ],
+  "exclude": [
+    "status.example.com",
+    "third-party.example.com"
+  ],
+  "allowed_ports": [
+    "http:80",
+    "https:443"
+  ],
+  "application_paths": [
+    "/"
+  ],
+  "max_threads": 20,
+  "max_rate_limit": 10,
+  "max_tasks": 10000,
+  "max_response_bytes": 65536
+}

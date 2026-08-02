@@ -1,68 +1,51 @@
-# Remediation Guidance
+# Defensive Remediation
 
-## Primary remediation
+## Primary fix
 
-The safest solution is to ensure that version-control metadata never reaches the production web root.
+Do not deploy a Git working directory to a publicly served production path. Build and deploy only the files required by the application.
 
-1. Build the application in a controlled CI/CD environment.
-2. Publish only the required runtime or static artifacts.
-3. Exclude `.git`, `.svn`, `.hg`, editor files, backups, and temporary archives from deployment packages.
-4. Verify the final artifact before release.
+## Immediate containment
 
-A `.gitignore` file does not protect a deployed `.git` directory. `.gitignore` controls which working-tree files Git tracks; it does not make the repository metadata inaccessible to a web server.
+1. Remove `.git` and other version-control metadata from the web root.
+2. Add web-server rules denying access to hidden version-control directories.
+3. Purge affected CDN and reverse-proxy caches.
+4. Review access logs for historical requests to `.git` paths.
+5. Identify every related hostname, port, backup, archive, and deployment path.
 
-## Defense in depth
+## Secret response
 
-Web-server rules can block accidental exposure, but they should supplement—not replace—clean deployment artifacts.
+If repository history may have contained secrets:
 
-### Nginx example
+1. Treat exposed values as compromised.
+2. Rotate API keys, tokens, passwords, certificates, and deployment credentials.
+3. Revoke old credentials instead of only deleting them from the latest commit.
+4. Review audit logs for unauthorized use.
+5. Remove secrets from history using an approved repository-cleaning process.
+
+## Deployment controls
+
+- Use CI/CD to create immutable build artifacts.
+- Exclude `.git`, `.svn`, `.hg`, editor files, backups, and local environment files.
+- Add release checks that fail when version-control metadata is present.
+- Use container multi-stage builds and copy only production artifacts.
+- Separate source checkout locations from public document roots.
+- Test production and staging deployments after every pipeline change.
+
+## Defense-in-depth examples
+
+### Nginx
 
 ```nginx
-location ~ (^|/)\.git(?:/|$) {
+location ~ /\.git(?:/|$) {
+    deny all;
     return 404;
 }
 ```
 
-Reload only after validating the configuration:
-
-```bash
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-### Apache HTTP Server example
-
-Place an appropriate rule in the virtual host configuration:
+### Apache
 
 ```apache
-<DirectoryMatch "(^|/)\.git/">
-    Require all denied
-</DirectoryMatch>
+RedirectMatch 404 /\.git(?:/|$)
 ```
 
-Validate and reload according to the operating system and deployment process.
-
-### IIS guidance
-
-Use Request Filtering or URL Rewrite to deny `.git` path segments, and remove the directory from the application root. Test the rule in a staging environment before production rollout.
-
-## Incident response after exposure
-
-1. Remove the exposed metadata immediately.
-2. Search access logs for requests containing `/.git/`.
-3. Review current and historical commits for secrets.
-4. Rotate exposed or potentially exposed passwords, API keys, certificates, and tokens.
-5. Revoke obsolete credentials rather than only deleting them from the latest commit.
-6. Review related systems for unauthorized use.
-7. Add automated deployment checks to prevent recurrence.
-
-## Verification
-
-After remediation, verify that representative paths no longer return repository data:
-
-```bash
-curl --include --max-time 10 https://example.com/.git/HEAD
-curl --include --max-time 10 https://example.com/.git/config
-```
-
-A generic `404` is preferable to revealing whether a hidden repository path exists. Also confirm that the `.git` directory is absent from the deployed filesystem or container image.
+These rules are secondary controls. The preferred fix is to remove repository metadata from the deployment entirely.

@@ -1,32 +1,31 @@
 name: Bug report
-description: Report an issue in the toolkit without including real target data.
+description: Report a reproducible problem in Git Exposure Auditor
 title: "[Bug]: "
-labels:
-  - bug
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Do not include third-party secrets, credentials, personal data, or out-of-scope target information.
+        Do not include real third-party targets, credentials, secrets, personal data, or private program scope.
   - type: input
-    id: script
+    id: version
     attributes:
-      label: Affected script
-      placeholder: scripts/best-practice.sh
+      label: Version
+      placeholder: 2.0.0
     validations:
       required: true
   - type: input
-    id: environment
+    id: operating-system
     attributes:
-      label: Environment
-      placeholder: Kali Linux, Bash 5.x, httpx version
+      label: Operating system
+      placeholder: Kali Linux / Ubuntu / WSL
     validations:
       required: true
   - type: textarea
     id: reproduction
     attributes:
       label: Minimal reproduction
-      description: Use safe example domains or a local test server.
+      description: Use localhost or example.invalid fixtures.
     validations:
       required: true
   - type: textarea
@@ -41,10 +40,3 @@ body:
       label: Actual behavior
     validations:
       required: true
-  - type: checkboxes
-    id: safety
-    attributes:
-      label: Safety confirmation
-      options:
-        - label: I removed real secrets and unauthorized target information.
-          required: true

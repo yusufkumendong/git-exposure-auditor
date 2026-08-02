@@ -1,0 +1,466 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../lib/common.sh
+source "$ROOT_DIR/lib/common.sh"
+
+VERSION="$(<"$ROOT_DIR/VERSION")"
+
+usage() {
+  cat <<'HELP'
+Git Exposure Auditor v2.0.0
+
+Usage:
+  git-exposure-auditor --domain example.com --authorized [options]
+  git-exposure-auditor --targets targets.txt --authorized [options]
+
+Required:
+  --domain DOMAIN           Root domain for passive discovery and scoped probing.
+  --targets FILE            Authorized host/URL list. Use exactly one input mode.
+  --authorized              Explicit acknowledgement that testing is authorized.
+
+Scope and coverage:
+  --scope FILE              JSON scope policy. If omitted, an exact ad-hoc scope is generated.
+  --paths FILE              Approved application base paths. Default comes from scope or '/'.
+  --ports SPEC              ProjectDiscovery format, e.g. http:80,https:443.
+  --no-discovery            Skip crt.sh and assetfinder in domain mode.
+  --confirm                 Safe metadata confirmation; no repository reconstruction.
+
+Performance and safety:
+  --threads N               Worker count, default 15, maximum 50.
+  --rate-limit N            Global maximum requests/second, default 10, maximum 50.
+  --timeout N               Per-request timeout in seconds, default 8, maximum 30.
+  --max-body N              Maximum response bytes read in memory, default 65536.
+  --max-tasks N             Maximum URL/path validation tasks, default 10000.
+  --user-agent VALUE        Custom User-Agent.
+
+Output and repeatability:
+  --output DIR              Output directory.
+  --history FILE            Append unique confirmed/probable URLs and show new findings.
+  --resume-from FILE        Reuse completed validation tasks from a prior findings.jsonl.
+  --dry-run                 Prepare and validate scope/targets without HTTP probing.
+  --version                 Print version.
+  -h, --help                Show help.
+
+Examples:
+  ./bin/git-exposure-auditor --domain example.com --authorized
+
+  ./bin/git-exposure-auditor \
+    --domain example.com \
+    --scope config/scope.example.json \
+    --paths examples/paths.example.txt \
+    --confirm \
+    --authorized
+
+  ./bin/git-exposure-auditor \
+    --targets examples/targets.example.txt \
+    --authorized \
+    --threads 10 \
+    --rate-limit 5
+
+The tool automates discovery, false-positive reduction, scoring, and report drafting.
+It does not guarantee a bounty and does not dump or reconstruct Git repositories.
+HELP
+}
+
+DOMAIN=""
+TARGETS_FILE=""
+SCOPE_FILE=""
+PATHS_FILE=""
+PORTS=""
+PORTS_EXPLICIT=0
+AUTHORIZED=0
+DISCOVERY=1
+CONFIRM=0
+THREADS=15
+RATE_LIMIT=10
+TIMEOUT=8
+MAX_BODY=65536
+MAX_TASKS=10000
+OUTPUT_DIR=""
+HISTORY_FILE=""
+RESUME_FROM=""
+DRY_RUN=0
+USER_AGENT="git-exposure-auditor/$VERSION"
+
+ORIGINAL_ARGS=("$@")
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --domain)
+      [[ $# -ge 2 ]] || gea_fail "--domain requires a value."
+      DOMAIN="$2"; shift 2 ;;
+    --targets)
+      [[ $# -ge 2 ]] || gea_fail "--targets requires a file."
+      TARGETS_FILE="$2"; shift 2 ;;
+    --scope)
+      [[ $# -ge 2 ]] || gea_fail "--scope requires a file."
+      SCOPE_FILE="$2"; shift 2 ;;
+    --paths)
+      [[ $# -ge 2 ]] || gea_fail "--paths requires a file."
+      PATHS_FILE="$2"; shift 2 ;;
+    --ports)
+      [[ $# -ge 2 ]] || gea_fail "--ports requires a value."
+      PORTS="$2"; PORTS_EXPLICIT=1; shift 2 ;;
+    --authorized)
+      AUTHORIZED=1; shift ;;
+    --no-discovery)
+      DISCOVERY=0; shift ;;
+    --confirm)
+      CONFIRM=1; shift ;;
+    --threads)
+      [[ $# -ge 2 ]] || gea_fail "--threads requires a value."
+      THREADS="$2"; shift 2 ;;
+    --rate-limit)
+      [[ $# -ge 2 ]] || gea_fail "--rate-limit requires a value."
+      RATE_LIMIT="$2"; shift 2 ;;
+    --timeout)
+      [[ $# -ge 2 ]] || gea_fail "--timeout requires a value."
+      TIMEOUT="$2"; shift 2 ;;
+    --max-body)
+      [[ $# -ge 2 ]] || gea_fail "--max-body requires a value."
+      MAX_BODY="$2"; shift 2 ;;
+    --max-tasks)
+      [[ $# -ge 2 ]] || gea_fail "--max-tasks requires a value."
+      MAX_TASKS="$2"; shift 2 ;;
+    --output)
+      [[ $# -ge 2 ]] || gea_fail "--output requires a directory."
+      OUTPUT_DIR="$2"; shift 2 ;;
+    --history)
+      [[ $# -ge 2 ]] || gea_fail "--history requires a file."
+      HISTORY_FILE="$2"; shift 2 ;;
+    --resume-from)
+      [[ $# -ge 2 ]] || gea_fail "--resume-from requires a findings.jsonl file."
+      RESUME_FROM="$2"; shift 2 ;;
+    --user-agent)
+      [[ $# -ge 2 ]] || gea_fail "--user-agent requires a value."
+      USER_AGENT="$2"; shift 2 ;;
+    --dry-run)
+      DRY_RUN=1; shift ;;
+    --version)
+      printf '%s\n' "$VERSION"; exit 0 ;;
+    -h|--help)
+      usage; exit 0 ;;
+    *)
+      gea_fail "Unknown option: $1" ;;
+  esac
+done
+
+(( AUTHORIZED == 1 )) || gea_fail "Authorization acknowledgement is required. Add --authorized only when you have permission."
+
+if [[ -n "$DOMAIN" && -n "$TARGETS_FILE" ]]; then
+  gea_fail "Use either --domain or --targets, not both."
+fi
+if [[ -z "$DOMAIN" && -z "$TARGETS_FILE" ]]; then
+  gea_fail "One input mode is required: --domain or --targets."
+fi
+
+gea_require_range "threads" "$THREADS" 1 50
+gea_require_range "rate limit" "$RATE_LIMIT" 1 50
+gea_require_range "timeout" "$TIMEOUT" 1 30
+gea_require_range "max body" "$MAX_BODY" 1 262144
+gea_require_range "max tasks" "$MAX_TASKS" 1 50000
+
+for command_name in curl jq python3; do
+  command -v "$command_name" >/dev/null 2>&1 || gea_fail "Missing dependency: $command_name"
+done
+
+INPUT_MODE="domain"
+if [[ -n "$TARGETS_FILE" ]]; then
+  INPUT_MODE="targets"
+  [[ -f "$TARGETS_FILE" ]] || gea_fail "Targets file not found: $TARGETS_FILE"
+fi
+[[ -z "$PATHS_FILE" || -f "$PATHS_FILE" ]] || gea_fail "Paths file not found: $PATHS_FILE"
+[[ -z "$RESUME_FROM" || -f "$RESUME_FROM" ]] || gea_fail "Resume file not found: $RESUME_FROM"
+
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+SAFE_LABEL="assessment"
+if [[ "$INPUT_MODE" == "domain" ]]; then
+  SAFE_LABEL="$(python3 "$ROOT_DIR/lib/scope.py" normalize-domain --domain "$DOMAIN")"
+else
+  SAFE_LABEL="target-list"
+fi
+SAFE_LABEL="$(tr -cd 'a-zA-Z0-9._-' <<< "$SAFE_LABEL")"
+OUTPUT_DIR="${OUTPUT_DIR:-results/${SAFE_LABEL}-v2-${TIMESTAMP}}"
+mkdir -p "$OUTPUT_DIR"
+OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
+
+STARTED_AT="$(date --iso-8601=seconds 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
+CONFIRM_JSON=false
+DISCOVERY_JSON=false
+(( CONFIRM == 1 )) && CONFIRM_JSON=true
+(( DISCOVERY == 1 )) && DISCOVERY_JSON=true
+TMPDIR="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR"' EXIT
+
+EFFECTIVE_SCOPE="$OUTPUT_DIR/scope-snapshot.json"
+if [[ -n "$SCOPE_FILE" ]]; then
+  [[ -f "$SCOPE_FILE" ]] || gea_fail "Scope file not found: $SCOPE_FILE"
+  python3 "$ROOT_DIR/lib/scope.py" validate --scope "$SCOPE_FILE" >/dev/null
+  cp "$SCOPE_FILE" "$EFFECTIVE_SCOPE"
+else
+  if [[ "$INPUT_MODE" == "domain" ]]; then
+    DEFAULT_PORTS="${PORTS:-http:80,https:443}"
+    NORMALIZED_DOMAIN="$(python3 "$ROOT_DIR/lib/scope.py" derive-domain \
+      --domain "$DOMAIN" \
+      --output "$EFFECTIVE_SCOPE" \
+      --ports "$DEFAULT_PORTS" \
+      --max-threads "$THREADS" \
+      --max-rate-limit "$RATE_LIMIT" \
+      --max-tasks "$MAX_TASKS" \
+      --max-response-bytes "$MAX_BODY")"
+    DOMAIN="$NORMALIZED_DOMAIN"
+  else
+    python3 "$ROOT_DIR/lib/scope.py" derive-targets \
+      --targets "$TARGETS_FILE" \
+      --output "$EFFECTIVE_SCOPE" \
+      --ports "$PORTS" \
+      --max-threads "$THREADS" \
+      --max-rate-limit "$RATE_LIMIT" \
+      --max-tasks "$MAX_TASKS" \
+      --max-response-bytes "$MAX_BODY" >/dev/null
+  fi
+fi
+
+SCOPE_MAX_THREADS="$(jq -r '.max_threads // 20' "$EFFECTIVE_SCOPE")"
+SCOPE_MAX_RATE="$(jq -r '.max_rate_limit // 10' "$EFFECTIVE_SCOPE")"
+SCOPE_MAX_TASKS="$(jq -r '.max_tasks // 10000' "$EFFECTIVE_SCOPE")"
+SCOPE_MAX_BODY="$(jq -r '.max_response_bytes // 65536' "$EFFECTIVE_SCOPE")"
+
+(( THREADS <= SCOPE_MAX_THREADS )) || gea_fail "Requested threads ($THREADS) exceed the scope maximum ($SCOPE_MAX_THREADS)."
+(( RATE_LIMIT <= SCOPE_MAX_RATE )) || gea_fail "Requested rate limit ($RATE_LIMIT) exceeds the scope maximum ($SCOPE_MAX_RATE)."
+(( MAX_TASKS <= SCOPE_MAX_TASKS )) || MAX_TASKS="$SCOPE_MAX_TASKS"
+(( MAX_BODY <= SCOPE_MAX_BODY )) || MAX_BODY="$SCOPE_MAX_BODY"
+
+if (( PORTS_EXPLICIT == 1 )); then
+  python3 "$ROOT_DIR/lib/scope.py" check-ports --scope "$EFFECTIVE_SCOPE" --ports "$PORTS" >/dev/null
+elif [[ "$INPUT_MODE" == "domain" ]]; then
+  PORTS="$(jq -r '.allowed_ports | join(",")' "$EFFECTIVE_SCOPE")"
+else
+  PORTS=""
+fi
+
+APP_PATHS="$OUTPUT_DIR/application-paths.txt"
+PATH_ARGS=(
+  paths
+  --scope "$EFFECTIVE_SCOPE"
+  --output "$APP_PATHS"
+  --max-paths 50
+)
+[[ -n "$PATHS_FILE" ]] && PATH_ARGS+=( --input "$PATHS_FILE" )
+PATH_COUNT="$(python3 "$ROOT_DIR/lib/scope.py" "${PATH_ARGS[@]}")"
+
+SCAN_INPUT="$OUTPUT_DIR/scan-input.txt"
+RAW_HOSTS="$TMPDIR/raw-hosts.txt"
+: > "$RAW_HOSTS"
+
+if [[ "$INPUT_MODE" == "domain" ]]; then
+  # Validate that the selected root is permitted by a supplied scope.
+  if [[ -z "${NORMALIZED_DOMAIN:-}" ]]; then
+    NORMALIZED_DOMAIN="$(python3 "$ROOT_DIR/lib/scope.py" normalize-domain --domain "$DOMAIN")"
+    DOMAIN="$NORMALIZED_DOMAIN"
+  fi
+
+  printf '%s\n' "$DOMAIN" >> "$RAW_HOSTS"
+  if (( DISCOVERY == 1 )); then
+    CRT_NAMES="$TMPDIR/crtsh-names.txt"
+    gea_info "Querying Certificate Transparency data."
+    if gea_fetch_crtsh_names "$DOMAIN" "$CRT_NAMES" "$OUTPUT_DIR/crtsh-errors.log"; then
+      cat "$CRT_NAMES" >> "$RAW_HOSTS"
+      gea_info "crt.sh names collected: $(wc -l < "$CRT_NAMES" | tr -d ' ')"
+    else
+      gea_warn "crt.sh did not return usable data; continuing with other sources."
+      gea_warn "Details: $OUTPUT_DIR/crtsh-errors.log"
+    fi
+
+    if command -v assetfinder >/dev/null 2>&1; then
+      gea_info "Running assetfinder."
+      if ! assetfinder --subs-only "$DOMAIN" >> "$RAW_HOSTS" 2>"$OUTPUT_DIR/assetfinder-errors.log"; then
+        gea_warn "assetfinder returned an error; see assetfinder-errors.log."
+      fi
+    else
+      gea_warn "assetfinder is not installed; continuing with the root domain and crt.sh."
+      : > "$OUTPUT_DIR/assetfinder-errors.log"
+    fi
+  else
+    gea_info "Passive discovery disabled."
+    : > "$OUTPUT_DIR/crtsh-errors.log"
+    : > "$OUTPUT_DIR/assetfinder-errors.log"
+  fi
+
+  FILTER_STATS="$(python3 "$ROOT_DIR/lib/scope.py" filter-hosts \
+    --scope "$EFFECTIVE_SCOPE" \
+    --input "$RAW_HOSTS" \
+    --output "$SCAN_INPUT")"
+else
+  FILTER_STATS="$(python3 "$ROOT_DIR/lib/scope.py" filter-targets \
+    --scope "$EFFECTIVE_SCOPE" \
+    --input "$TARGETS_FILE" \
+    --output "$SCAN_INPUT")"
+fi
+
+INPUT_COUNT="$(wc -l < "$SCAN_INPUT" | tr -d ' ')"
+[[ "$INPUT_COUNT" -gt 0 ]] || gea_fail "No in-scope targets were produced."
+gea_info "In-scope scan inputs: $INPUT_COUNT"
+gea_info "Approved application paths: $PATH_COUNT"
+gea_info "Threads: $THREADS | Rate limit: $RATE_LIMIT req/s | Timeout: ${TIMEOUT}s"
+
+# Record the operator command without secrets or response data.
+printf '%q ' "$0" "${ORIGINAL_ARGS[@]}" > "$OUTPUT_DIR/command.txt"
+printf '\n' >> "$OUTPUT_DIR/command.txt"
+
+if (( DRY_RUN == 1 )); then
+  FINISHED_AT="$(date --iso-8601=seconds 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
+  jq -n \
+    --arg tool_version "$VERSION" \
+    --arg started_at "$STARTED_AT" \
+    --arg finished_at "$FINISHED_AT" \
+    --arg input_mode "$INPUT_MODE" \
+    --arg output_directory "$OUTPUT_DIR" \
+    --argjson safe_confirmation "$CONFIRM_JSON" \
+    --argjson dry_run true \
+    --argjson input_count "$INPUT_COUNT" \
+    --argjson path_count "$PATH_COUNT" \
+    '{tool:"git-exposure-auditor",tool_version:$tool_version,started_at:$started_at,finished_at:$finished_at,input_mode:$input_mode,output_directory:$output_directory,safe_confirmation:$safe_confirmation,dry_run:$dry_run,input_count:$input_count,path_count:$path_count}' \
+    > "$OUTPUT_DIR/metadata.json"
+  gea_info "Dry run complete. Output directory: $OUTPUT_DIR"
+  exit 0
+fi
+
+gea_resolve_httpx || exit 2
+
+LIVE_JSONL="$OUTPUT_DIR/reachable.jsonl"
+LIVE_URLS="$OUTPUT_DIR/reachable-urls.txt"
+: > "$LIVE_JSONL"
+: > "$LIVE_URLS"
+
+HTTPX_ARGS=(
+  -l "$SCAN_INPUT"
+  -silent
+  -nc
+  -json
+  -sc
+  -cl
+  -ct
+  -location
+  -hash sha256
+  -server
+  -ip
+  -cname
+  -cdn
+  -probe
+  -threads "$THREADS"
+  -rate-limit "$RATE_LIMIT"
+  -timeout "$TIMEOUT"
+  -retries 1
+  -o "$LIVE_JSONL"
+)
+
+if [[ -n "$PORTS" ]]; then
+  HTTPX_ARGS+=( -ports "$PORTS" )
+fi
+if gea_httpx_supports "$HTTPX_BIN" '-nf, -no-fallback'; then
+  HTTPX_ARGS+=( -no-fallback )
+fi
+if gea_httpx_supports "$HTTPX_BIN" '-rstr, -response-size-to-read'; then
+  HTTPX_ARGS+=( -response-size-to-read 16384 )
+fi
+if gea_httpx_supports "$HTTPX_BIN" '-duc, -disable-update-check'; then
+  HTTPX_ARGS+=( -disable-update-check )
+fi
+
+gea_info "Probing reachable HTTP services."
+"$HTTPX_BIN" "${HTTPX_ARGS[@]}"
+
+if [[ -s "$LIVE_JSONL" ]]; then
+  jq -r '.url // empty' "$LIVE_JSONL" | sed '/^[[:space:]]*$/d' | sort -u > "$LIVE_URLS"
+fi
+LIVE_COUNT="$(wc -l < "$LIVE_URLS" | tr -d ' ')"
+gea_info "Reachable base URLs: $LIVE_COUNT"
+
+FINDINGS_JSONL="$OUTPUT_DIR/findings.jsonl"
+VALIDATOR_ARGS=(
+  --urls "$LIVE_URLS"
+  --paths "$APP_PATHS"
+  --scope "$EFFECTIVE_SCOPE"
+  --output "$FINDINGS_JSONL"
+  --threads "$THREADS"
+  --rate-limit "$RATE_LIMIT"
+  --timeout "$TIMEOUT"
+  --max-body "$MAX_BODY"
+  --max-tasks "$MAX_TASKS"
+  --user-agent "$USER_AGENT"
+)
+(( CONFIRM == 1 )) && VALIDATOR_ARGS+=( --confirm )
+[[ -n "$RESUME_FROM" ]] && VALIDATOR_ARGS+=( --resume-from "$RESUME_FROM" )
+
+gea_info "Running soft-404-aware Git metadata validation."
+VALIDATOR_SUMMARY="$(python3 "$ROOT_DIR/lib/validator.py" "${VALIDATOR_ARGS[@]}")"
+printf '%s\n' "$VALIDATOR_SUMMARY" > "$OUTPUT_DIR/validator-summary.json"
+
+FINISHED_AT="$(date --iso-8601=seconds 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
+HTTPX_VERSION="$("$HTTPX_BIN" -version 2>&1 | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^ //;s/ $//')"
+ASSETFINDER_VERSION="$(assetfinder -h 2>&1 | head -n 1 || true)"
+
+jq -n \
+  --arg tool_version "$VERSION" \
+  --arg started_at "$STARTED_AT" \
+  --arg finished_at "$FINISHED_AT" \
+  --arg input_mode "$INPUT_MODE" \
+  --arg root_domain "$DOMAIN" \
+  --arg output_directory "$OUTPUT_DIR" \
+  --arg httpx_binary "$HTTPX_BIN" \
+  --arg httpx_version "$HTTPX_VERSION" \
+  --arg ports "$PORTS" \
+  --argjson filter_stats "$FILTER_STATS" \
+  --argjson safe_confirmation "$CONFIRM_JSON" \
+  --argjson discovery "$DISCOVERY_JSON" \
+  --argjson threads "$THREADS" \
+  --argjson rate_limit "$RATE_LIMIT" \
+  --argjson timeout "$TIMEOUT" \
+  --argjson max_body "$MAX_BODY" \
+  --argjson max_tasks "$MAX_TASKS" \
+  --argjson input_count "$INPUT_COUNT" \
+  --argjson path_count "$PATH_COUNT" \
+  --argjson live_count "$LIVE_COUNT" \
+  '{tool:"git-exposure-auditor",tool_version:$tool_version,started_at:$started_at,finished_at:$finished_at,input_mode:$input_mode,root_domain:$root_domain,output_directory:$output_directory,httpx_binary:$httpx_binary,httpx_version:$httpx_version,ports:$ports,safe_confirmation:$safe_confirmation,passive_discovery:$discovery,threads:$threads,rate_limit:$rate_limit,timeout:$timeout,max_response_bytes:$max_body,max_tasks:$max_tasks,input_count:$input_count,path_count:$path_count,reachable_count:$live_count,filter_stats:$filter_stats}' \
+  > "$OUTPUT_DIR/metadata.json"
+
+{
+  printf 'git-exposure-auditor %s\n' "$VERSION"
+  printf 'python %s\n' "$(python3 --version 2>&1)"
+  printf 'jq %s\n' "$(jq --version 2>&1)"
+  printf 'curl %s\n' "$(curl --version | head -n 1)"
+  printf 'httpx %s\n' "$HTTPX_VERSION"
+  [[ -n "$ASSETFINDER_VERSION" ]] && printf 'assetfinder %s\n' "$ASSETFINDER_VERSION"
+} > "$OUTPUT_DIR/versions.txt"
+
+REPORT_SUMMARY="$(python3 "$ROOT_DIR/lib/report.py" \
+  --findings "$FINDINGS_JSONL" \
+  --metadata "$OUTPUT_DIR/metadata.json" \
+  --live-urls "$LIVE_URLS" \
+  --output-dir "$OUTPUT_DIR")"
+printf '%s\n' "$REPORT_SUMMARY" > "$OUTPUT_DIR/report-summary.json"
+
+if [[ -n "$HISTORY_FILE" ]]; then
+  mkdir -p "$(dirname "$HISTORY_FILE")"
+  touch "$HISTORY_FILE"
+  sort -u "$HISTORY_FILE" > "$TMPDIR/history-sorted.txt"
+  sort -u "$OUTPUT_DIR/manual-review.txt" > "$TMPDIR/current-sorted.txt"
+  comm -23 "$TMPDIR/current-sorted.txt" "$TMPDIR/history-sorted.txt" > "$OUTPUT_DIR/new-findings.txt"
+  cat "$TMPDIR/history-sorted.txt" "$TMPDIR/current-sorted.txt" | sort -u > "$TMPDIR/history-new.txt"
+  mv "$TMPDIR/history-new.txt" "$HISTORY_FILE"
+  gea_info "New manual-review findings: $(wc -l < "$OUTPUT_DIR/new-findings.txt" | tr -d ' ')"
+fi
+
+CONFIRMED_COUNT="$(jq -r '.confirmed_count // 0' "$OUTPUT_DIR/scan-summary.json")"
+PROBABLE_COUNT="$(jq -r '.probable_count // 0' "$OUTPUT_DIR/scan-summary.json")"
+gea_info "Confirmed candidates: $CONFIRMED_COUNT"
+gea_info "Probable candidates: $PROBABLE_COUNT"
+gea_info "Manual review queue: $OUTPUT_DIR/manual-review.txt"
+gea_info "Markdown summary: $OUTPUT_DIR/summary.md"
+gea_info "Disclosure draft: $OUTPUT_DIR/report-draft.md"
+gea_info "Output directory: $OUTPUT_DIR"
