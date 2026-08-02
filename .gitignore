@@ -1,0 +1,13 @@
+# Runtime output
+results/*
+!results/.gitkeep
+
+# Temporary files
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
+
+# Editor settings
+.vscode/
+.idea/

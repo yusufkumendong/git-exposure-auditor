@@ -21,15 +21,19 @@ OUTPUT="${2:-results/medium-$(date +%Y%m%d-%H%M%S).txt}"
 
 [[ -n "$INPUT" ]] || { usage; exit 2; }
 [[ -r "$INPUT" ]] || { echo "[!] Cannot read input file: $INPUT" >&2; exit 2; }
-command -v httpx >/dev/null 2>&1 || { echo "[!] Missing dependency: httpx" >&2; exit 2; }
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=common.sh
+source "$SCRIPT_DIR/common.sh"
+resolve_projectdiscovery_httpx || exit 2
 
 mkdir -p "$(dirname "$OUTPUT")"
 
 MATCHER='status_code == 200 && (contains(body, "ref: refs/heads/") || regex("^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$", trim_space(body)))'
 
 echo "[*] Running a low-rate metadata check against the supplied targets."
+: > "$OUTPUT"
 
-httpx \
+"$HTTPX_BIN" \
   -l "$INPUT" \
   -silent \
   -nc \

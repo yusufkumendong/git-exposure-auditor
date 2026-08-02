@@ -121,12 +121,17 @@ fi
   exit 2
 }
 
-for cmd in httpx jq; do
+for cmd in jq; do
   command -v "$cmd" >/dev/null 2>&1 || {
     echo "[!] Missing dependency: $cmd" >&2
     exit 2
   }
 done
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=common.sh
+source "$SCRIPT_DIR/common.sh"
+resolve_projectdiscovery_httpx || exit 2
 
 MODE="targets"
 LABEL="targets"
@@ -175,21 +180,13 @@ if [[ "$MODE" == "domain" ]]; then
 
   echo "[*] Collecting passive hostnames for: $DOMAIN"
 
-  if ! curl \
-    --fail \
-    --silent \
-    --show-error \
-    --get \
-    --connect-timeout 10 \
-    --max-time 45 \
-    --retry 2 \
-    --retry-delay 1 \
-    --data-urlencode "q=%.$DOMAIN" \
-    --data-urlencode 'output=json' \
-    'https://crt.sh/' \
-    | jq -r '.[].name_value? // empty | split("\n")[]' \
-    >> "$RAW"; then
+  CRT_NAMES="$TMPDIR/crtsh-names.txt"
+  if fetch_crtsh_names "$DOMAIN" "$CRT_NAMES" "$OUTDIR/crtsh-errors.log"; then
+    cat "$CRT_NAMES" >> "$RAW"
+    printf '[*] crt.sh names collected: %s\n' "$(wc -l < "$CRT_NAMES" | tr -d ' ')"
+  else
     echo "[!] crt.sh did not return usable data; continuing." >&2
+    echo "[!] Details: $OUTDIR/crtsh-errors.log" >&2
   fi
 
   if ! assetfinder --subs-only "$DOMAIN" >> "$RAW" 2>"$OUTDIR/assetfinder-errors.log"; then
@@ -229,6 +226,8 @@ MATCHER='status_code == 200 && (contains(body, "ref: refs/heads/") || regex("^([
 JSONL="$OUTDIR/candidates.jsonl"
 TXT="$OUTDIR/candidates.txt"
 
+: > "$JSONL"
+
 HTTPX_ARGS=(
   -l "$INPUT_FILE"
   -silent
@@ -250,7 +249,7 @@ if [[ -n "$PORTS" ]]; then
   HTTPX_ARGS+=( -ports "$PORTS" )
 fi
 
-httpx "${HTTPX_ARGS[@]}"
+"$HTTPX_BIN" "${HTTPX_ARGS[@]}"
 
 if [[ -s "$JSONL" ]]; then
   jq -r '.url // empty' "$JSONL" | sort -u > "$TXT"

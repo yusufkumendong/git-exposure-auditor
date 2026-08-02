@@ -1,5 +1,7 @@
 # Git Exposure Auditor
 
+**Current release: v1.0.2**
+
 A scope-aware Bash toolkit for **non-destructive detection of publicly exposed Git metadata**. It provides four learning workflows—**Easy, Medium, Hard, and Best Practice**—for validating `/.git/HEAD` exposure without automatically downloading a repository.
 
 > **Authorized use only:** Run this toolkit only against systems you own or are explicitly permitted to test. Always follow the target's scope, rate limits, prohibited-test rules, and disclosure policy.
@@ -52,8 +54,10 @@ git-exposure-auditor/
 ├── CHANGELOG.md
 ├── SECURITY.md
 ├── CONTRIBUTING.md
+├── VERSION
 ├── install.sh
 ├── scripts/
+│   ├── common.sh
 │   ├── easy.sh
 │   ├── medium.sh
 │   ├── hard.sh
@@ -61,7 +65,8 @@ git-exposure-auditor/
 ├── docs/
 │   ├── LEVELS.md
 │   ├── REMEDIATION.md
-│   └── REPORT_TEMPLATE.md
+│   ├── REPORT_TEMPLATE.md
+│   └── TROUBLESHOOTING.md
 ├── examples/
 │   └── targets.example.txt
 └── results/
@@ -82,36 +87,56 @@ Core commands:
 - `assetfinder`
 - Optional: `anew`
 
-### Install system packages on Debian, Ubuntu, Kali, or WSL
+### Kali Linux installation
+
+Kali packages ProjectDiscovery httpx under the distinct command name `httpx-toolkit`, which avoids a collision with the unrelated Python HTTPX CLI:
 
 ```bash
 sudo apt update
-sudo apt install -y curl jq golang-go unzip git
+sudo apt install -y curl jq golang-go unzip git httpx-toolkit
+httpx-toolkit -version
 ```
 
-### Install Go tools
+Install the remaining Go tools:
 
 ```bash
 chmod +x install.sh
 ./install.sh
 ```
 
-Or install them manually:
+Version 1.0.2 detects `httpx-toolkit` automatically. A manual `httpx-pd` symlink is no longer required.
+
+### Generic Go installation
 
 ```bash
 go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
 go install -v github.com/tomnomnom/assetfinder@latest
 go install -v github.com/tomnomnom/anew@latest
-export PATH="$PATH:$(go env GOPATH)/bin"
+export PATH="$(go env GOPATH)/bin:$PATH"
+hash -r
 ```
 
 Verify the commands:
 
 ```bash
-httpx -version
+"$(go env GOPATH)/bin/httpx" -version
 assetfinder --help
 anew -h
 ```
+
+When more than one command named `httpx` is installed, select ProjectDiscovery explicitly:
+
+```bash
+HTTPX_BIN=/usr/bin/httpx-toolkit ./scripts/hard.sh example.com
+```
+
+See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for command-collision and `crt.sh` recovery guidance.
+
+## Dependency resolution
+
+The batch workflows validate candidate binaries before use and print the selected ProjectDiscovery executable. The lookup order is `HTTPX_BIN`, `httpx-pd`, `httpx-toolkit`, common Go binary directories, and finally `httpx` only when its flags match ProjectDiscovery.
+
+A Python HTTPX error such as `Usage: httpx [OPTIONS] URL` with `No such option: -l` indicates the wrong CLI. Follow [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
 
 ## Usage
 
@@ -180,6 +205,20 @@ Optional conservative overrides:
 THREADS=10 RATE_LIMIT=5 PORTS='http:80,https:443' \
   ./scripts/hard.sh example.com results/example-hard
 ```
+
+Select Kali's ProjectDiscovery binary explicitly when needed:
+
+```bash
+HTTPX_BIN=/usr/bin/httpx-toolkit ./scripts/hard.sh example.com
+```
+
+Increase the Certificate Transparency timeout for unusually large responses:
+
+```bash
+CRT_MAX_TIME=120 CRT_RETRIES=1 ./scripts/hard.sh example.com
+```
+
+The script downloads Certificate Transparency JSON before parsing it. A timeout, HTTP 502, or malformed response is recorded in `crtsh-errors.log`, and the workflow continues with the root domain and `assetfinder` output.
 
 **Advantages**
 
