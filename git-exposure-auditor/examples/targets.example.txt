@@ -1,0 +1,5 @@
+# One hostname or base URL per line.
+# Replace these examples with systems you own or are explicitly authorized to test.
+example.com
+https://app.example.com
+http://staging.example.com:8080
