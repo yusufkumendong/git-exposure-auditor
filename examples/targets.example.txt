@@ -1,4 +1,0 @@
-# One authorized hostname or URL per line.
-example.com
-https://app.example.com
-http://staging.example.com:8080

@@ -1,0 +1,3 @@
+# Satu target per baris
+https://example.com
+https://app.example.com

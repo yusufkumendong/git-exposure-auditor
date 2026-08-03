@@ -1,29 +1,22 @@
 # Contributing
 
-Contributions that improve safety, correctness, portability, documentation, evidence quality, and false-positive handling are welcome.
+## Development rules
 
-## Development principles
+- Keep requests non-destructive and bounded.
+- Do not add dumping, secret extraction, authentication/WAF bypass, brute force, or exploit chaining.
+- New classification logic must include a fixture or integration assertion.
+- Do not persist raw response bodies.
+- Preserve direct input and scope validation behavior.
 
-- Keep default rates conservative and enforce hard upper bounds.
-- Preserve strict scope validation.
-- Minimize requests and collected data.
-- Do not add repository dumping, object reconstruction, secret use, credential testing, WAF evasion, or destructive behavior.
-- Prefer official documentation for third-party command behavior.
-- Treat a finding as a review candidate, not a guaranteed bounty.
-- Keep output sanitized and reproducible.
-
-## Before opening a pull request
+## Local checks
 
 ```bash
-bash -n install.sh bin/git-exposure-auditor lib/common.sh scripts/*.sh tests/*.sh
-python3 -m py_compile lib/*.py tests/*.py
-./tests/run-tests.sh
+shellcheck -S error -x bin/gea lib/*.sh scripts/*.sh tests/*.sh install.sh
+./tests/syntax.sh
+./tests/input.sh
+./tests/integration.sh
 ```
 
-When available:
+## Versioning
 
-```bash
-shellcheck install.sh bin/git-exposure-auditor lib/common.sh scripts/*.sh tests/*.sh
-```
-
-Update the README and changelog when behavior, dependencies, request volume, scope handling, or output formats change.
+Use Semantic Versioning. Release Candidate tags use `vX.Y.Z-rcN`. Do not use an LTS label unless `docs/SUPPORT.md` explicitly defines the support window and the compatibility quality gate has passed.

@@ -1,162 +1,135 @@
 #!/usr/bin/env bash
 
-# Shared helpers for Git Exposure Auditor v2.
+set -o pipefail
 
-gea_info() { printf '[*] %s\n' "$*"; }
-gea_warn() { printf '[!] %s\n' "$*" >&2; }
-gea_fail() { gea_warn "$*"; exit "${2:-2}"; }
+GEA_VERSION="3.1.0-rc1"
+GEA_NAME="Git Exposure Auditor"
 
-gea_is_uint() {
-  [[ "${1:-}" =~ ^[0-9]+$ ]]
+if [[ -t 1 && "${NO_COLOR:-false}" != "true" ]]; then
+  C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[1;33m'
+  C_BLUE='\033[0;34m'; C_CYAN='\033[0;36m'; C_BOLD='\033[1m'; C_RESET='\033[0m'
+else
+  C_RED=''; C_GREEN=''; C_YELLOW=''; C_BLUE=''; C_CYAN=''; C_BOLD=''; C_RESET=''
+fi
+
+log_info()  { [[ "${QUIET:-false}" == "true" ]] || printf "%b[INFO]%b %s\n" "$C_BLUE" "$C_RESET" "$*"; }
+log_ok()    { [[ "${QUIET:-false}" == "true" ]] || printf "%b[OK]%b %s\n" "$C_GREEN" "$C_RESET" "$*"; }
+log_warn()  { printf "%b[WARN]%b %s\n" "$C_YELLOW" "$C_RESET" "$*" >&2; }
+log_error() { printf "%b[ERROR]%b %s\n" "$C_RED" "$C_RESET" "$*" >&2; }
+debug()     { [[ "${VERBOSE:-false}" == "true" ]] && printf "%b[DEBUG]%b %s\n" "$C_CYAN" "$C_RESET" "$*" >&2 || true; }
+die()       { log_error "$*"; exit 1; }
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "Dependency tidak ditemukan: $1"
 }
 
-gea_require_range() {
-  local name="${1:-value}" value="${2:-}" minimum="${3:-1}" maximum="${4:-1}"
-  gea_is_uint "$value" && (( value >= minimum && value <= maximum )) || {
-    gea_fail "$name must be an integer from $minimum to $maximum."
-  }
+trim() {
+  local value="$*"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
 }
 
-gea_is_projectdiscovery_httpx() {
-  local binary="${1:-}" help_text
-  [[ -n "$binary" && -x "$binary" ]] || return 1
-  help_text="$("$binary" -h 2>&1 || true)"
-  grep -q -- '-l, -list' <<< "$help_text" && \
-    grep -Eq -- '(-j, -json|-json)' <<< "$help_text" && \
-    grep -q -- '-path' <<< "$help_text"
+normalize_url() {
+  python3 - "$1" <<'PY'
+import sys
+from urllib.parse import urlsplit, urlunsplit
+raw = sys.argv[1].strip()
+if not raw:
+    raise SystemExit(1)
+if not raw.lower().startswith(("http://", "https://")):
+    raw = "https://" + raw
+p = urlsplit(raw)
+if p.scheme not in {"http", "https"} or not p.hostname:
+    raise SystemExit(1)
+host = p.hostname.encode("idna").decode("ascii").lower()
+port = f":{p.port}" if p.port else ""
+userinfo = ""
+if p.username or p.password:
+    raise SystemExit(1)
+path = p.path.rstrip("/")
+print(urlunsplit((p.scheme.lower(), host + port, path, "", "")))
+PY
 }
 
-gea_httpx_supports() {
-  local binary="${1:-}" pattern="${2:-}" help_text
-  [[ -n "$binary" && -n "$pattern" ]] || return 1
-  help_text="$("$binary" -h 2>&1 || true)"
-  grep -q -- "$pattern" <<< "$help_text"
+extract_host() {
+  python3 - "$1" <<'PY'
+import sys
+from urllib.parse import urlsplit
+raw = sys.argv[1]
+if not raw.startswith(("http://", "https://")):
+    raw = "https://" + raw
+p = urlsplit(raw)
+print((p.hostname or "").lower())
+PY
 }
 
-gea_resolve_httpx() {
-  local candidate resolved gobin gopath
-  local -a candidates=()
-  local -A seen=()
-
-  [[ -n "${HTTPX_BIN:-}" ]] && candidates+=("$HTTPX_BIN")
-  candidates+=("httpx-pd" "httpx-toolkit" "$HOME/go/bin/httpx")
-
-  if command -v go >/dev/null 2>&1; then
-    gobin="$(go env GOBIN 2>/dev/null || true)"
-    gopath="$(go env GOPATH 2>/dev/null || true)"
-    [[ -n "$gobin" ]] && candidates+=("$gobin/httpx")
-    [[ -n "$gopath" ]] && candidates+=("$gopath/bin/httpx")
-  fi
-
-  candidates+=("httpx")
-
-  for candidate in "${candidates[@]}"; do
-    [[ -n "$candidate" ]] || continue
-    [[ -z "${seen[$candidate]:-}" ]] || continue
-    seen["$candidate"]=1
-
-    if [[ "$candidate" == */* ]]; then
-      [[ -x "$candidate" ]] || continue
-      resolved="$candidate"
-    else
-      resolved="$(command -v "$candidate" 2>/dev/null || true)"
-      [[ -n "$resolved" ]] || continue
-    fi
-
-    if gea_is_projectdiscovery_httpx "$resolved"; then
-      HTTPX_BIN="$resolved"
-      export HTTPX_BIN
-      gea_info "Using ProjectDiscovery httpx: $HTTPX_BIN"
-      return 0
-    fi
-  done
-
-  cat >&2 <<'MESSAGE'
-[!] ProjectDiscovery httpx was not found.
-[!] The unrelated Python HTTPX CLI may be installed as /usr/bin/httpx.
-
-Kali Linux:
-  sudo apt update
-  sudo apt install -y httpx-toolkit
-  httpx-toolkit -version
-
-Generic Go installation:
-  go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
-  export PATH="$(go env GOPATH)/bin:$PATH"
-  hash -r
-
-Explicit selection:
-  HTTPX_BIN=/usr/bin/httpx-toolkit ./bin/git-exposure-auditor ...
-MESSAGE
-  return 1
+extract_port() {
+  python3 - "$1" <<'PY'
+import sys
+from urllib.parse import urlsplit
+raw = sys.argv[1]
+if not raw.startswith(("http://", "https://")):
+    raw = "https://" + raw
+p = urlsplit(raw)
+print(p.port or "")
+PY
 }
 
-gea_fetch_crtsh_names() {
-  local domain="${1:-}" output_file="${2:-}" error_log="${3:-/dev/null}"
-  local response_file max_time retries
-
-  [[ -n "$domain" && -n "$output_file" ]] || return 2
-  response_file="$(mktemp)"
-  max_time="${CRT_MAX_TIME:-90}"
-  retries="${CRT_RETRIES:-1}"
-  : > "$output_file"
-  : > "$error_log"
-
-  if ! curl \
-    --fail \
-    --silent \
-    --show-error \
-    --compressed \
-    --get \
-    --connect-timeout 10 \
-    --max-time "$max_time" \
-    --retry "$retries" \
-    --retry-delay 2 \
-    --retry-connrefused \
-    --user-agent 'git-exposure-auditor/2.0.0' \
-    --data-urlencode "q=%.$domain" \
-    --data-urlencode 'output=json' \
-    --output "$response_file" \
-    'https://crt.sh/' \
-    2>"$error_log"; then
-    rm -f "$response_file"
-    return 1
-  fi
-
-  if ! jq -e 'type == "array"' "$response_file" >/dev/null 2>>"$error_log"; then
-    printf '%s\n' 'crt.sh returned data that was not a valid JSON array.' >> "$error_log"
-    rm -f "$response_file"
-    return 1
-  fi
-
-  if ! jq -r '.[].name_value? // empty | split("\n")[]' \
-    "$response_file" > "$output_file" 2>>"$error_log"; then
-    rm -f "$response_file"
-    return 1
-  fi
-
-  rm -f "$response_file"
-  return 0
+host_is_ip_literal() {
+  python3 - "$1" <<'PY'
+import ipaddress, sys
+try:
+    ipaddress.ip_address(sys.argv[1])
+except ValueError:
+    raise SystemExit(1)
+PY
 }
 
-gea_sha256_file() {
-  local file="${1:-}"
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$file" | awk '{print $1}'
-  else
-    shasum -a 256 "$file" | awk '{print $1}'
-  fi
+is_private_host() {
+  python3 - "$1" <<'PY'
+import ipaddress, socket, sys
+host = sys.argv[1].strip().strip("[]")
+if host == "localhost" or host.endswith(".localhost"):
+    raise SystemExit(0)
+try:
+    ips = [ipaddress.ip_address(host)]
+except ValueError:
+    try:
+        ips = sorted({ipaddress.ip_address(x[4][0]) for x in socket.getaddrinfo(host, None)})
+    except OSError:
+        raise SystemExit(1)
+for ip in ips:
+    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_unspecified:
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
 }
 
-gea_join_by() {
-  local delimiter="${1:-}"; shift || true
-  local first=1 item
-  for item in "$@"; do
-    if (( first )); then
-      printf '%s' "$item"
-      first=0
-    else
-      printf '%s%s' "$delimiter" "$item"
-    fi
-  done
+safe_filename() {
+  printf '%s' "$1" | sed -E 's#^https?://##; s#[^A-Za-z0-9._-]+#_#g; s#_+$##'
+}
+
+random_hex() {
+  python3 - <<'PY'
+import secrets
+print(secrets.token_hex(8))
+PY
+}
+
+print_banner() {
+  [[ "${QUIET:-false}" == "true" ]] && return 0
+  cat <<EOF_BANNER
+${C_CYAN}${C_BOLD}${GEA_NAME} v${GEA_VERSION}${C_RESET}
+Safe, signature-aware .git exposure validation
+EOF_BANNER
+}
+
+legal_notice() {
+  [[ "${QUIET:-false}" == "true" ]] && return 0
+  cat <<'EOF_NOTICE'
+Gunakan hanya pada aset yang tercantum dalam scope program dan mengizinkan pengujian.
+Tool tidak melakukan repository dumping, credential testing, bypass autentikasi/WAF,
+brute force, eksploitasi, maupun perubahan pada target.
+EOF_NOTICE
 }

@@ -1,17 +1,5 @@
-# Runtime results
-results/*
-!results/.gitkeep
-
-# Python
+reports/
 __pycache__/
-*.py[cod]
-
-# Editors and operating systems
-.vscode/
-.idea/
+*.pyc
+*.log
 .DS_Store
-Thumbs.db
-
-# Local scope files may contain private program details.
-config/scope.local.json
-*.local.json

@@ -1,0 +1,10 @@
+# Endpoint metadata terbatas yang dipakai mode Hard/Best Practice.
+# Tidak ada recursive crawling atau repository reconstruction.
+/.git/HEAD
+/.git/config
+/.git/packed-refs
+/.git/refs/heads/main
+/.git/refs/heads/master
+/.git/logs/HEAD
+/.git/index
+/.git/objects/info/packs

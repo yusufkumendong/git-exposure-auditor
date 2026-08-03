@@ -1,0 +1,5 @@
+# Exact domain
+example.com
+
+# Domain beserta seluruh subdomain
+*.example.com
