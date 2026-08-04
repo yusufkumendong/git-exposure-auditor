@@ -96,7 +96,7 @@ try:
     ips = [ipaddress.ip_address(host)]
 except ValueError:
     try:
-        ips = sorted({ipaddress.ip_address(x[4][0]) for x in socket.getaddrinfo(host, None)})
+        ips = {ipaddress.ip_address(x[4][0]) for x in socket.getaddrinfo(host, None)}
     except OSError:
         raise SystemExit(1)
 for ip in ips:
