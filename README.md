@@ -87,7 +87,7 @@ GitHub Actions menguji Ubuntu 24.04, Debian 12 slim, AlmaLinux 10, Rocky Linux 9
 ## Instalasi
 
 ```bash
-git clone https://github.com/USERNAME/git-exposure-auditor.git
+git clone https://github.com/yusufkumendong/git-exposure-auditor.git
 cd git-exposure-auditor
 chmod +x install.sh
 ./install.sh
