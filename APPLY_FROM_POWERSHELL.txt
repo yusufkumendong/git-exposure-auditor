@@ -1,0 +1,11 @@
+This hotfix intentionally does NOT contain LICENSE or .gitignore so your latest local edits to those files are preserved.
+After copying these files into the repository, run:
+
+git update-index --chmod=+x bin/gea install.sh scripts/authorized-advanced.sh tests/run_all.sh tests/integration.sh tests/syntax.sh
+
+git add -A
+git status
+git commit -m "fix: harden CI and Linux compatibility for v3.2.0-rc2"
+git push origin main
+git tag -a v3.2.0-rc2 -m "Git Exposure Auditor v3.2.0-rc2"
+git push origin v3.2.0-rc2

@@ -2,7 +2,7 @@
 
 ## Status
 
-`3.2.0-rc1` adalah Release Candidate, bukan LTS.
+`3.2.0-rc2` adalah Release Candidate, bukan LTS.
 
 ## Runtime
 
@@ -52,3 +52,7 @@
 ## LTS gate
 
 Label LTS hanya diberikan setelah CI matrix stabil, regression fixture bertambah, compatibility feedback nyata diterima, dan support window terdokumentasi.
+
+## Catatan Rocky Linux 9
+
+Rocky Linux 9 pada matrix CI menggunakan Python 3.11 (`python3.11`) agar memenuhi minimum runtime Python 3.10+. Wrapper `bin/gea` dapat memilih interpreter versioned yang kompatibel secara otomatis.

@@ -1,4 +1,4 @@
-# Testing Status — 3.2.0-rc1
+# Testing Status — 3.2.0-rc2
 
 Tanggal pengujian lokal: **2026-08-04**
 
@@ -51,3 +51,7 @@ Belum diklaim lulus lokal:
 - LTS qualification.
 
 Test dilakukan terhadap mock server lokal. Tidak ada target internet yang dipindai selama proses build ini.
+
+## rc2 CI hardening
+
+Workflow utama menggunakan Python 3.12 secara eksplisit. Container matrix menggunakan interpreter yang memenuhi Python >= 3.10; Rocky Linux 9 memakai Python 3.11. Test entry point dipanggil melalui `bash tests/run_all.sh` agar permission bit dari Windows tidak menjadi sumber false failure.

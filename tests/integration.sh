@@ -6,11 +6,12 @@ SERVER_PID=""
 cleanup() { [[ -n "$SERVER_PID" ]] && kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$TMP_DIR"; }
 trap cleanup EXIT INT TERM
 
-python3 "$ROOT_DIR/tests/mock_server.py" &
+PYTHON_BIN="${GEA_PYTHON:-python3}"
+"$PYTHON_BIN" "$ROOT_DIR/tests/mock_server.py" &
 SERVER_PID=$!
 for _ in {1..30}; do curl -s http://127.0.0.1:18765/ >/dev/null && break; sleep 0.1; done
 
-python3 - "$ROOT_DIR" "$TMP_DIR" <<'PY'
+"$PYTHON_BIN" - "$ROOT_DIR" "$TMP_DIR" <<'PY'
 import json, subprocess, sys
 from pathlib import Path
 root=Path(sys.argv[1]); tmp=Path(sys.argv[2])

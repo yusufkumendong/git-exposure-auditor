@@ -2,7 +2,7 @@
 
 Git Exposure Auditor adalah validator exposure `.git` yang **non-destruktif, adaptive, signature-aware, scope-aware, dan rendah false positive** untuk aset yang berada dalam scope pengujian resmi.
 
-> Versi paket ini: **3.2.0-rc1**. Statusnya Release Candidate, belum LTS.
+> Versi paket ini: **3.2.0-rc2**. Statusnya Release Candidate, belum LTS.
 
 Tool tidak menganggap HTTP 200 sebagai vulnerability. Setiap respons dibandingkan dengan random-path baseline, divalidasi menggunakan signature Git, lalu diagregasi menjadi satu verdict per host.
 
@@ -66,9 +66,21 @@ sudo apt install -y bash curl python3 git
 
 ### AlmaLinux, Rocky Linux, dan RHEL
 
+AlmaLinux 10:
+
 ```bash
 sudo dnf install -y bash curl python3 git
 ```
+
+Rocky Linux 9 / RHEL 9 (gunakan Python 3.11 agar memenuhi minimum Python 3.10+):
+
+```bash
+sudo dnf install -y bash curl python3.11 git
+```
+
+## CI dan kompatibilitas
+
+GitHub Actions menguji Ubuntu 24.04, Debian 12 slim, AlmaLinux 10, Rocky Linux 9 dengan Python 3.11, dan Kali rolling. Test suite dipanggil melalui `bash` agar checkout/update dari Windows tidak membuat CI gagal hanya karena executable bit lokal hilang.
 
 ## Instalasi
 

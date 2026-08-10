@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.2.0-rc2 — 2026-08-10
+
+- Memperbaiki GitHub Actions yang gagal saat file executable bit hilang setelah update dari Windows.
+- CI menjalankan test script melalui `bash` sehingga tidak bergantung pada permission bit lokal.
+- Menambahkan explicit Python 3.12 pada job utama dan Python 3.11 untuk Rocky Linux 9.
+- Wrapper `bin/gea` sekarang memilih runtime Python >= 3.10 dan mendukung `GEA_PYTHON`.
+- Installer memvalidasi versi Python, bukan hanya keberadaan command `python3`.
+- Makefile menggunakan VERSION secara dinamis dan target test/install tidak bergantung pada executable bit.
+
 ## 3.2.0-rc1 — 2026-08-04
 
 ### Architecture

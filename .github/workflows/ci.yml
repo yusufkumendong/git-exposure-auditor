@@ -3,46 +3,105 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   test:
+    name: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y curl python3 shellcheck
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends curl shellcheck
+
+      - name: Verify runtime
+        run: |
+          python --version
+          curl --version | head -n 1
+          shellcheck --version | head -n 2
+
       - name: ShellCheck
         run: shellcheck -S error -x bin/gea scripts/*.sh tests/*.sh install.sh
+
+      - name: Python compile
+        run: python -m py_compile gea/*.py tests/mock_server.py tests/unit.py
+
       - name: Test suite
-        run: ./tests/run_all.sh
+        env:
+          GEA_PYTHON: python
+        run: bash tests/run_all.sh
 
   container-compatibility:
+    name: container-compatibility (${{ matrix.name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        image:
-          - ubuntu:24.04
-          - debian:12-slim
-          - almalinux:10
-          - rockylinux:9
-          - kalilinux/kali-rolling
+        include:
+          - name: ubuntu-24.04
+            image: ubuntu:24.04
+            family: apt
+            python: python3
+          - name: debian-12-slim
+            image: debian:12-slim
+            family: apt
+            python: python3
+          - name: almalinux-10
+            image: almalinux:10
+            family: dnf
+            python: python3
+          - name: rockylinux-9-python311
+            image: rockylinux:9
+            family: dnf-py311
+            python: python3.11
+          - name: kali-rolling
+            image: kalilinux/kali-rolling
+            family: apt
+            python: python3
     container:
       image: ${{ matrix.image }}
+    env:
+      GEA_PYTHON: ${{ matrix.python }}
     steps:
-      - name: Install git and runtime
+      - name: Install runtime (APT)
+        if: matrix.family == 'apt'
         shell: bash
         run: |
-          if command -v apt-get >/dev/null 2>&1; then
-            apt-get update
-            DEBIAN_FRONTEND=noninteractive apt-get install -y git bash curl python3 ca-certificates
-          else
-            dnf install -y git bash curl python3 ca-certificates
-          fi
-      - uses: actions/checkout@v4
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git bash curl python3 ca-certificates
+
+      - name: Install runtime (DNF)
+        if: matrix.family == 'dnf'
+        shell: bash
+        run: dnf install -y git bash curl python3 ca-certificates
+
+      - name: Install runtime (Rocky 9 / Python 3.11)
+        if: matrix.family == 'dnf-py311'
+        shell: bash
+        run: dnf install -y git bash curl python3.11 ca-certificates
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Python requirement
+        shell: bash
+        run: |
+          "$GEA_PYTHON" --version
+          "$GEA_PYTHON" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'
+
       - name: Run tests
         shell: bash
-        run: ./tests/run_all.sh
+        run: bash tests/run_all.sh

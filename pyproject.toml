@@ -1,6 +1,6 @@
 [project]
 name = "git-exposure-auditor"
-version = "3.2.0rc1"
+version = "3.2.0rc2"
 description = "Safe, adaptive, signature-aware .git exposure validator for authorized assets"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}

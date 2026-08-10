@@ -1,6 +1,6 @@
 # Support Policy
 
-## 3.2.0-rc1
+## 3.2.0-rc2
 
 - Channel: Release Candidate.
 - Tujuan: regression testing, compatibility feedback, dan stabilisasi adaptive engine.

@@ -88,7 +88,7 @@ class HttpConfig:
     insecure: bool = False
     proxy: str = ""
     http_version: str = "auto"
-    user_agent: str = "Git-Exposure-Auditor/3.2.0-rc1 (+authorized-security-research)"
+    user_agent: str = "Git-Exposure-Auditor/3.2.0-rc2 (+authorized-security-research)"
     headers: list[str] = field(default_factory=list)
     rate: float = 0.0
 
