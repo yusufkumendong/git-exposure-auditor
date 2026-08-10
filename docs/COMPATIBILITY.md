@@ -56,3 +56,8 @@ Label LTS hanya diberikan setelah CI matrix stabil, regression fixture bertambah
 ## Catatan Rocky Linux 9
 
 Rocky Linux 9 pada matrix CI menggunakan Python 3.11 (`python3.11`) agar memenuhi minimum runtime Python 3.10+. Wrapper `bin/gea` dapat memilih interpreter versioned yang kompatibel secara otomatis.
+
+
+## Rocky Linux 9 container note
+
+Rocky Linux 9 minimal/container images can ship `curl-minimal` by default. GEA only requires the `curl` command, so the CI job keeps `curl-minimal` instead of forcing installation of the mutually exclusive full `curl` RPM. If a user specifically needs full curl features, replace it explicitly with `dnf -y swap curl-minimal curl`.

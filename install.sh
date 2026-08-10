@@ -6,7 +6,8 @@ for cmd in bash curl; do
   command -v "$cmd" >/dev/null 2>&1 || {
     echo "Dependency belum terpasang: $cmd" >&2
     echo "Debian/Kali/Ubuntu: sudo apt update && sudo apt install -y bash curl" >&2
-    echo "RHEL/Alma/Rocky: sudo dnf install -y bash curl" >&2
+    echo "RHEL/Alma: sudo dnf install -y bash curl" >&2
+    echo "Rocky 9 minimal/container: sudo dnf install -y bash curl-minimal" >&2
     exit 1
   }
 done

@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.2.0-rc3
+
+- Fix Rocky Linux 9 CI failure caused by `curl-minimal` conflicting with the full `curl` RPM.
+- Preserve the preinstalled `curl-minimal` package when it already provides the `curl` command.
+- Add explicit Rocky container diagnostics for the installed curl RPM variant.
+- Update installation and compatibility documentation for Rocky Linux 9 minimal/container images.
+
 ## 3.2.0-rc2 — 2026-08-10
 
 - Memperbaiki GitHub Actions yang gagal saat file executable bit hilang setelah update dari Windows.

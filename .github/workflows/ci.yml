@@ -91,7 +91,16 @@ jobs:
       - name: Install runtime (Rocky 9 / Python 3.11)
         if: matrix.family == 'dnf-py311'
         shell: bash
-        run: dnf install -y git bash curl python3.11 ca-certificates
+        run: |
+          # Rocky 9 container images may already ship curl-minimal.
+          # Do not request the full curl package unless it is actually needed,
+          # because curl and curl-minimal are mutually exclusive RPM variants.
+          dnf install -y git bash python3.11 ca-certificates
+          if ! command -v curl >/dev/null 2>&1; then
+            dnf install -y curl-minimal
+          fi
+          rpm -q curl curl-minimal || true
+          curl --version | head -n 1
 
       - name: Checkout
         uses: actions/checkout@v4

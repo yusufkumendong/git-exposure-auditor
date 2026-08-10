@@ -75,7 +75,9 @@ sudo dnf install -y bash curl python3 git
 Rocky Linux 9 / RHEL 9 (gunakan Python 3.11 agar memenuhi minimum Python 3.10+):
 
 ```bash
-sudo dnf install -y bash curl python3.11 git
+sudo dnf install -y bash python3.11 git ca-certificates
+# Rocky 9 minimal/container images usually already provide curl-minimal.
+# If `curl` is missing: sudo dnf install -y curl-minimal
 ```
 
 ## CI dan kompatibilitas
