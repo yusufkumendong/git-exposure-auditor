@@ -3,3 +3,15 @@ __pycache__/
 *.pyc
 *.log
 .DS_Store
+
+# Python / GEA v3.2
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# GEA runtime
+reports/
+.gea-state/
