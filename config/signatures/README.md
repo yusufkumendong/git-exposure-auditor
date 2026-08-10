@@ -1,3 +1,5 @@
-# Signature notes
+# Custom signatures
 
-Signature aktif berada pada `lib/analyzer.py` agar tidak membutuhkan dependency tambahan. Folder ini disediakan untuk migrasi signature data-driven pada versi berikutnya.
+Signature bawaan berada di `gea/analyzer.py`. Signature tambahan dapat dimuat melalui `--signature-file` menggunakan JSON array.
+
+Contoh tersedia di `examples/signatures.example.json`. Custom signature hanya menambah pola validasi response dan tidak menambah endpoint, crawling, dumping, atau exploit action.

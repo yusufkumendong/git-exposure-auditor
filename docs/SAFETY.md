@@ -4,23 +4,42 @@
 
 - GET request terbatas ke endpoint metadata Git yang ditentukan.
 - Random non-existent path untuk baseline.
-- Passive subdomain discovery untuk wildcard.
-- Minimal evidence hashing dan reporting.
+- Passive subdomain discovery yang dibatasi.
+- Signature, hash, header metadata, dan similarity validation.
+- Manual-review recommendation.
+- Authorized-advanced metadata recording untuk program yang mengizinkan.
 
 ## Tidak diimplementasikan
 
 - Repository dumping atau reconstruction.
-- Object enumeration recursive.
-- Credential/secret extraction.
-- Authentication atau WAF bypass.
-- CAPTCHA/JavaScript challenge bypass.
-- Brute force, denial of service, race flooding, atau exploit chaining.
-- Follow redirect otomatis ke luar scope.
+- Recursive object enumeration.
+- Credential, token, atau secret testing.
+- Authentication bypass otomatis.
+- WAF/CDN evasion otomatis.
+- CAPTCHA atau browser challenge bypass.
+- Header mutation library untuk evasion.
+- Identity rotation atau stealth.
+- Brute force, DoS, race flooding, atau exploit chaining.
+- Perubahan data target.
+- Auto-follow redirect.
+
+## Authorized Advanced
+
+Mode `authorized-advanced` mewajibkan:
+
+- explicit authorization flag;
+- explicit bypass-permission flag;
+- scope file;
+- policy JSON yang menyatakan authorization dan advanced validation.
+
+Metadata tersebut disimpan untuk auditability. Tool tetap hanya menjalankan endpoint validation yang sama dan tidak mengubah safety boundary.
 
 ## Sebelum menjalankan
 
-1. Pastikan aset benar-benar in-scope.
-2. Baca bagian automation, rate limit, dan prohibited testing pada policy.
-3. Gunakan rate/concurrency konservatif.
-4. Jangan menguji third-party infrastructure yang muncul dari CNAME/redirect tanpa izin.
-5. Hentikan saat menerima blocking, instability, atau permintaan dari program.
+1. Pastikan hostname dan jenis testing benar-benar in-scope.
+2. Simpan snapshot policy program.
+3. Baca automation, rate limit, prohibited testing, dan third-party rules.
+4. Gunakan rate/concurrency konservatif.
+5. Jangan mengizinkan private IP kecuali merupakan lab/aset internal yang sah.
+6. Hentikan ketika target tidak stabil atau program meminta penghentian.
+7. Jangan mengirim raw evidence ke layanan pihak ketiga tanpa izin.

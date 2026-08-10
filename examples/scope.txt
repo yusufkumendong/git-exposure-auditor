@@ -1,5 +1,7 @@
-# Exact domain
-example.com
+# Include exact host or wildcard
+include example.com
+include *.example.com
 
-# Domain beserta seluruh subdomain
-*.example.com
+# Exclusions are evaluated before includes
+exclude status.example.com
+exclude *.internal.example.com

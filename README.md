@@ -1,27 +1,48 @@
-# Git Exposure Auditor V3.1
+# Git Exposure Auditor v3.2
 
-Git Exposure Auditor adalah validator `.git` exposure yang aman, signature-aware, dan rendah false positive untuk aset yang berada dalam scope pengujian resmi. Tool membandingkan respons endpoint Git dengan baseline path acak agar dapat membedakan exposure asli dari soft-404, SPA fallback, custom error page, WAF/CDN challenge, rate limit, redirect, dan upstream error.
+Git Exposure Auditor adalah validator exposure `.git` yang **non-destruktif, adaptive, signature-aware, scope-aware, dan rendah false positive** untuk aset yang berada dalam scope pengujian resmi.
 
-> Versi saat ini: **3.1.0-rc1 (Release Candidate)**. Belum berstatus LTS.
+> Versi paket ini: **3.2.0-rc1**. Statusnya Release Candidate, belum LTS.
+
+Tool tidak menganggap HTTP 200 sebagai vulnerability. Setiap respons dibandingkan dengan random-path baseline, divalidasi menggunakan signature Git, lalu diagregasi menjadi satu verdict per host.
 
 ## Batas keselamatan
 
-Gunakan hanya pada aset milik sendiri atau aset yang tercantum dalam scope program bug bounty/VDP. Tool ini tidak melakukan repository dumping, credential testing, authentication bypass, WAF bypass, brute force, exploit chaining, atau perubahan pada target.
+Gunakan hanya pada aset milik sendiri atau aset yang tercantum dalam scope program bug bounty/VDP dan mengizinkan automated testing.
 
-## Fitur utama
+Tool ini tidak melakukan:
 
-- Input langsung domain, subdomain, URL, dan wildcard—TXT tidak wajib.
-- Wildcard memakai enumerasi pasif terbatas melalui `subfinder` atau `crt.sh`.
-- Empat mode: Easy, Medium, Hard, dan Best Practice.
-- Auto-calibration menggunakan random-path baseline.
-- Deteksi soft-404, SPA fallback, custom error, WAF/CDN challenge, 429, redirect, 5xx, dan network error.
-- Validasi signature `HEAD`, `config`, `packed-refs`, branch refs, reflog, index `DIRC`, dan object pack listing.
-- Confidence score 0–100 dan alasan klasifikasi.
-- Retry terbatas, exponential backoff, serta dukungan `Retry-After`.
-- Rate limit, safe concurrency, proxy, custom header, HTTP/1.1 atau HTTP/2.
-- Scope otomatis dari `--domain`, `--subdomain`, `--target`, dan `--wildcard`.
-- Laporan JSONL, CSV, TXT, dan kandidat laporan Markdown untuk HackerOne.
-- Response body hanya dipakai sementara untuk validasi lalu dihapus; laporan menyimpan hash, bukan body.
+- repository dumping atau reconstruction;
+- recursive object enumeration;
+- credential/secret testing;
+- brute force;
+- denial of service;
+- exploit chaining;
+- perubahan data atau konfigurasi target;
+- automatic authentication bypass;
+- automatic WAF/CDN evasion;
+- redirect follow otomatis keluar scope.
+
+Mode `authorized-advanced` mencatat izin program dan mengaktifkan validasi lanjutan yang tetap non-destruktif. Mode tersebut **bukan bypass engine**.
+
+## Perubahan utama v3.2
+
+- Two-phase adaptive scanning untuk menghemat request.
+- Smart endpoint tiers: Tier 1, Tier 2, dan Tier 3.
+- Multi-baseline adaptif, maksimal tiga baseline per host.
+- Host-level verdict: `valid_exposure`, `potential_exposure`, `manual_review`, `waf_blocked`, `not_exposed`, `unreachable`, atau `out_of_scope`.
+- Explainable heuristic score dengan evidence breakdown.
+- Network error taxonomy: DNS, timeout, TLS, refused, reset, proxy, oversized body, dan lainnya.
+- Recommendation engine yang selalu menghasilkan action untuk host prioritas.
+- Scope Engine v2 dengan include, exclude, DNS/IP validation, dan redirect revalidation.
+- Resume dan checkpoint tanpa menduplikasi target yang sudah selesai.
+- Optional CNAME deduplication.
+- Redacted evidence bundle.
+- JSONL, CSV, TXT, HTML dashboard, dan candidate HackerOne Markdown.
+- Historical comparison melalui `--compare-report`.
+- Custom read-only signature melalui JSON.
+- Local deterministic report explainer melalui `gea explain`.
+- Mode `authorized-advanced` dan alias `bypass-authorized` dengan authorization gate yang ketat.
 
 ## Dependency
 
@@ -29,24 +50,24 @@ Wajib:
 
 - Bash 4.3+
 - curl
-- jq
-- Python 3
+- Python 3.10+
 
-Opsional untuk wildcard discovery yang lebih baik:
+Opsional:
 
-- subfinder
+- `subfinder` untuk passive wildcard discovery yang lebih baik.
+- `shellcheck` untuk development validation.
 
 ### Debian, Ubuntu, dan Kali
 
 ```bash
 sudo apt update
-sudo apt install -y curl jq python3 git
+sudo apt install -y bash curl python3 git
 ```
 
 ### AlmaLinux, Rocky Linux, dan RHEL
 
 ```bash
-sudo dnf install -y curl jq python3 git
+sudo dnf install -y bash curl python3 git
 ```
 
 ## Instalasi
@@ -65,102 +86,17 @@ sudo ./install.sh
 gea --version
 ```
 
-## Penggunaan tanpa TXT
-
-### Satu domain
-
-```bash
-gea --mode easy --domain example.com
-```
-
-### Satu subdomain
-
-```bash
-gea --mode medium --subdomain app.example.com
-```
-
-### Beberapa domain dan subdomain
-
-Opsi dapat diulang:
-
-```bash
-gea --mode hard \
-  --domain example.com \
-  --subdomain app.example.com \
-  --subdomain api.example.com
-```
-
-Atau dipisahkan koma:
-
-```bash
-gea --mode hard \
-  --domain example.com,example.org \
-  --subdomain app.example.com,api.example.com
-```
-
-### URL dengan port atau HTTP
-
-```bash
-gea --mode medium --target http://dev.example.com:8080
-```
-
-### Wildcard HackerOne
-
-Wildcard harus memakai tanda kutip agar tidak dikembangkan oleh shell:
-
-```bash
-gea --mode best-practice \
-  --wildcard '*.example.com' \
-  --authorized
-```
-
-Perilaku wildcard:
-
-1. Menambahkan `*.example.com` sebagai scope.
-2. Menemukan subdomain secara pasif.
-3. Memvalidasi setiap hasil agar tetap berada dalam wildcard.
-4. Membatasi hasil default maksimal 300 host.
-5. Memindai root domain dan host hasil discovery.
-
-Gunakan `subfinder` secara eksplisit:
-
-```bash
-gea --mode best-practice \
-  --wildcard '*.example.com' \
-  --authorized \
-  --enumerator subfinder \
-  --max-discovered 200
-```
-
-Gunakan Certificate Transparency tanpa subfinder:
-
-```bash
-gea --mode best-practice \
-  --wildcard '*.example.com' \
-  --authorized \
-  --enumerator crtsh
-```
-
-Tanpa discovery, hanya root domain yang diperiksa:
-
-```bash
-gea --mode best-practice \
-  --wildcard '*.example.com' \
-  --authorized \
-  --no-discover
-```
-
 ## Mode
 
 ### Easy
 
-- `/.git/HEAD`
-- Satu baseline path acak
-- Concurrency 1
-- Tanpa retry default
+- Satu random baseline.
+- Hanya `/.git/HEAD`.
+- Concurrency 1.
+- Tanpa retry default.
 
 ```bash
-./scripts/easy.sh example.com
+gea --mode easy --domain example.com
 ```
 
 ### Medium
@@ -168,137 +104,461 @@ gea --mode best-practice \
 - `/.git/HEAD`
 - `/.git/config`
 - `/.git/packed-refs`
-- Baseline, content validation, retry 1
+- Baseline validation dan satu retry default.
 
 ```bash
-./scripts/medium.sh app.example.com
+gea --mode medium --subdomain app.example.com
 ```
 
 ### Hard
 
-Memeriksa delapan endpoint metadata terbatas tanpa recursive crawling atau dumping.
+Memeriksa seluruh delapan endpoint metadata terbatas. Tidak melakukan crawling atau repository reconstruction.
 
 ```bash
-./scripts/hard.sh app.example.com
+gea --mode hard --target https://app.example.com
 ```
 
 ### Best Practice
 
 - `--authorized` wajib.
-- Scope otomatis dari input langsung.
-- Concurrency maksimal 5.
-- Rate maksimal 5 request/detik.
+- Scope eksplisit wajib, atau otomatis dibentuk dari direct input.
 - Default concurrency 3 dan rate 2 request/detik.
-- Wildcard discovery pasif dan dibatasi.
+- Maksimal concurrency dan rate 5.
+- Adaptive scan aktif secara default.
+- Multi-baseline adaptif.
 
 ```bash
-./scripts/best-practice.sh '*.example.com'
-```
-
-## Contoh aman untuk program bug bounty
-
-```bash
-gea --mode best-practice \
+gea \
+  --mode best-practice \
   --wildcard '*.example.com' \
   --authorized \
   --enumerator subfinder \
   --max-discovered 100 \
-  --concurrency 3 \
-  --rate 2 \
-  --retries 1 \
   --report-dir reports/example-program
 ```
 
-Selalu baca policy program terlebih dahulu. Wildcard pada halaman scope tidak selalu berarti seluruh jenis automated scanning diperbolehkan.
+### Authorized Advanced
 
-## Klasifikasi
+Mode ini hanya untuk program yang secara tertulis mengizinkan advanced/bypass-related validation. Mode ini mencatat policy metadata tetapi tidak menjalankan evasion otomatis.
 
-| Klasifikasi | Makna |
-|---|---|
-| `confirmed_exposure` | Signature Git kuat dan berbeda dari baseline |
-| `probable_exposure` | Indikasi Git kuat tetapi masih memerlukan validasi manual |
-| `soft_404` | Respons sangat mirip dengan random-path baseline |
-| `spa_fallback` | Halaman aplikasi yang sama dikembalikan untuk path berbeda |
-| `custom_error` | Respons 2xx terlihat seperti halaman error/challenge |
-| `waf_challenge` | Access denied atau challenge dari WAF/CDN |
-| `rate_limited` | HTTP 429 |
-| `protected` | Endpoint ditolak/tidak tersedia |
-| `redirect_in_scope` | Redirect menuju aset yang masih in-scope |
-| `redirect_out_of_scope` | Redirect keluar scope dan tidak diikuti |
-| `upstream_error` | HTTP 5xx dari origin/CDN/proxy/WAF |
-| `network_error` | DNS, TLS, timeout, atau koneksi gagal |
-| `suspicious` | Respons menarik tetapi bukti tidak cukup |
+Persyaratan wajib:
 
-HTTP 200 tidak otomatis dianggap vulnerable. HTTP 500 juga bukan bukti exposure dan hanya masuk rekomendasi validasi manual terbatas.
+- `--authorized`
+- `--bypass-permitted`
+- `--scope FILE`
+- `--policy-file FILE`
 
-## Proxy dan custom header
+```bash
+gea \
+  --mode authorized-advanced \
+  --target https://app.example.com \
+  --scope examples/scope.txt \
+  --policy-file examples/policy.example.json \
+  --authorized \
+  --bypass-permitted \
+  --concurrency 2 \
+  --rate 2 \
+  --report-dir reports/example-advanced
+```
+
+Alias berikut tersedia:
+
+```bash
+gea --mode bypass-authorized ...
+```
+
+Alias tersebut tetap memakai engine dan safety gate yang sama.
+
+## Two-phase adaptive scanning
+
+Untuk `best-practice` dan `authorized-advanced`, scanner tidak langsung mengirim delapan endpoint ke setiap host.
+
+### Phase 1 — High-value validation
+
+```text
+/.git/HEAD
+/.git/config
+```
+
+Jika hasil Phase 1 adalah soft-404, SPA fallback, protected, WAF-only, atau network failure tanpa bukti menarik, scanner berhenti pada host tersebut.
+
+### Phase 2 — Evidence expansion
+
+```text
+/.git/packed-refs
+/.git/logs/HEAD
+```
+
+Phase 2 hanya dijalankan ketika Phase 1 menghasilkan signature, suspicious response, in-scope redirect, rate limit, atau upstream response yang memerlukan review.
+
+### Phase 3 — Deep metadata validation
+
+```text
+/.git/refs/heads/main
+/.git/refs/heads/master
+/.git/index
+/.git/objects/info/packs
+```
+
+Gunakan `--full-scan` untuk memaksa seluruh tier pada `best-practice`.
+
+```bash
+gea --mode best-practice --domain example.com --authorized --full-scan
+```
+
+## Input
+
+Opsi dapat diulang atau dipisahkan dengan koma.
+
+```bash
+gea --mode hard \
+  --domain example.com,example.org \
+  --subdomain api.example.com \
+  --subdomain app.example.com
+```
+
+URL dengan port:
+
+```bash
+gea --mode medium --target http://dev.example.com:8080
+```
+
+Input file tetap didukung:
 
 ```bash
 gea --mode best-practice \
+  --list examples/targets.txt \
+  --scope examples/scope.txt \
+  --authorized
+```
+
+## Scope Engine v2
+
+Format `scope.txt`:
+
+```text
+include example.com
+include *.example.com
+exclude status.example.com
+exclude *.internal.example.com
+```
+
+Format singkat juga didukung:
+
+```text
+example.com
+*.example.com
+!status.example.com
+```
+
+Aturan exclude dievaluasi lebih dahulu. Saat explicit scope file atau `--scope-rule` digunakan, target input **tidak otomatis memperluas scope**.
+
+Tambahkan exclude dari CLI:
+
+```bash
+gea \
+  --mode best-practice \
+  --wildcard '*.example.com' \
+  --exclude-scope '*.internal.example.com' \
+  --authorized
+```
+
+Private, loopback, link-local, reserved, unspecified, dan multicast IP diblokir secara default. `--allow-private` wajib disertai `--authorized` dan hanya digunakan untuk lab atau aset internal yang benar-benar berizin.
+
+Gunakan strict canonical validation untuk menolak CNAME/canonical hostname yang berada di luar scope:
+
+```bash
+--scope-strict
+```
+
+Mode ini konservatif dan dapat memblokir aset in-scope yang secara sah memakai CDN pihak ketiga, sehingga harus disesuaikan dengan policy program.
+
+## Wildcard discovery
+
+```bash
+gea \
+  --mode best-practice \
+  --wildcard '*.example.com' \
+  --authorized \
+  --enumerator auto \
+  --max-discovered 200
+```
+
+Enumerator:
+
+- `auto`: memakai `subfinder`, fallback ke `crt.sh`.
+- `subfinder`: mewajibkan binary `subfinder`.
+- `crtsh`: memakai Certificate Transparency.
+- `none`: hanya root wildcard.
+
+Tanpa discovery:
+
+```bash
+gea --mode best-practice --wildcard '*.example.com' --authorized --no-discover
+```
+
+## Scope dan scheme
+
+```bash
+gea --mode medium --domain example.com --scheme https
+gea --mode medium --domain example.com --scheme http
+gea --mode medium --domain example.com --scheme both
+```
+
+## Request control
+
+```bash
+gea \
+  --mode best-practice \
+  --domain example.com \
+  --authorized \
+  --concurrency 3 \
+  --rate 2 \
+  --retries 1 \
+  --retry-delay 1 \
+  --retry-max-delay 10 \
+  --connect-timeout 5 \
+  --max-time 15
+```
+
+Retry hanya dilakukan secara selektif untuk:
+
+- connect/read timeout;
+- connection reset;
+- proxy error;
+- HTTP 429;
+- HTTP 502, 503, dan 504.
+
+DNS no-record, connection refused, dan TLS hostname mismatch tidak di-retry berulang.
+
+## HTTP, TLS, proxy, dan header
+
+```bash
+gea --mode medium --domain example.com --http-version 1.1
+gea --mode medium --domain example.com --http-version 2
+```
+
+```bash
+gea \
+  --mode best-practice \
   --domain example.com \
   --authorized \
   --proxy http://127.0.0.1:8080 \
   --header 'X-Bug-Bounty: researcher@example.test'
 ```
 
-Proxy hanya untuk routing resmi/observasi. Tool tidak menggunakan proxy untuk menyembunyikan identitas, melewati kontrol, atau menghindari rate limit.
+`--insecure` tersedia, tetapi hanya digunakan ketika policy dan konfigurasi target memang mengharuskan.
 
-## HTTP dan TLS
+## Multi-baseline
+
+Default dimulai dari satu baseline. Scanner dapat menambah baseline kedua ketika halaman terlihat HTML/dynamic, lalu baseline ketiga jika dua baseline awal tidak konsisten.
 
 ```bash
-gea --mode medium --domain example.com --http-version 1.1
-gea --mode medium --domain example.com --http-version 2
-gea --mode medium --domain example.com --insecure
+gea \
+  --mode best-practice \
+  --domain example.com \
+  --authorized \
+  --baseline-count 1 \
+  --max-baselines 3
 ```
 
-`--insecure` hanya digunakan saat policy dan kondisi target memang memerlukannya.
+## Resume dan checkpoint
+
+```bash
+gea \
+  --mode best-practice \
+  --wildcard '*.example.com' \
+  --authorized \
+  --report-dir reports/example \
+  --resume
+```
+
+Target yang sudah memiliki checkpoint `completed=true` tidak dipindai ulang. Reporter dibangun kembali dari JSONL yang sudah tersimpan sehingga hasil lama tidak hilang dan tidak diduplikasi.
+
+```bash
+--checkpoint-every 1
+```
+
+Checkpoint di-flush ke disk sesuai interval host tersebut.
+
+## CNAME deduplication
+
+```bash
+gea \
+  --mode best-practice \
+  --wildcard '*.example.com' \
+  --authorized \
+  --deduplicate-cname
+```
+
+Fitur ini mengurangi scan alias yang memiliki canonical hostname sama. Gunakan dengan hati-hati karena hostname berbeda tetap dapat menjalankan virtual host yang berbeda.
+
+## Custom signature
+
+```bash
+gea \
+  --mode hard \
+  --domain example.com \
+  --signature-file examples/signatures.example.json
+```
+
+Custom signature hanya menambah regex validasi terhadap endpoint yang sudah diizinkan. Fitur ini tidak menambah crawling atau exploit action.
+
+## Evidence storage dan redaction
+
+Mode penyimpanan:
+
+```text
+--store-body none
+--store-body snippet   # default
+--store-body full
+```
+
+Semua text evidence yang disimpan selalu melewati redaction untuk pola umum password, secret, token, authorization header, URL userinfo, dan private key block.
+
+Batasi evidence snippet:
+
+```bash
+--evidence-max-bytes 2048
+```
+
+Default maksimum body yang diambil curl adalah 262144 byte.
 
 ## Laporan
 
-Setiap eksekusi menghasilkan:
+Struktur laporan:
 
 ```text
-reports/YYYYMMDD-HHMMSS/
+reports/example/
+├── run-metadata.json
+├── scope-snapshot.json
+├── checkpoint.jsonl
+├── endpoint-results.jsonl
+├── endpoint-results.csv
 ├── results.jsonl
 ├── results.csv
+├── host-summary.jsonl
+├── host-summary.csv
 ├── summary.txt
-└── hackerone-findings.md
+├── report.html
+├── hackerone-findings.md
+└── evidence/
+    └── host-hash/
+        ├── summary.json
+        ├── response-metadata.jsonl
+        └── *.redacted.txt
 ```
 
-`hackerone-findings.md` hanya memasukkan `confirmed_exposure` dan `probable_exposure`. Tetap lakukan validasi manual serta sesuaikan title, impact, severity, dan reproduksi dengan policy program.
+`results.jsonl` dan `results.csv` dipertahankan sebagai compatibility alias/copy untuk workflow v3.1.
 
-Filter hasil:
+`hackerone-findings.md` hanya menghasilkan kandidat finding untuk host dengan verdict `valid_exposure`. Hasil `not_exposed`, WAF-only, 404, 5xx, dan network error tidak dijadikan finding.
+
+## Host verdict
+
+| Verdict | Makna |
+|---|---|
+| `valid_exposure` | Terdapat signature Git kuat yang reportable setelah manual validation |
+| `potential_exposure` | Signature cukup kuat, tetapi evidence masih ambigu |
+| `manual_review` | Respons menarik, redirect in-scope, 5xx, rate limit, atau custom response |
+| `waf_blocked` | WAF/access-control menghalangi validasi |
+| `not_exposed` | Soft-404, SPA fallback, protected, atau tidak ada signature |
+| `unreachable` | DNS/TLS/timeout/koneksi gagal |
+| `out_of_scope` | Scope/IP/redirect validation menolak target |
+
+Satu endpoint `valid_exposure` mengalahkan beberapa endpoint `not_exposed` pada host yang sama.
+
+## Explainable score
+
+Angka score adalah **heuristic score**, bukan probabilitas ilmiah.
+
+Contoh evidence breakdown:
+
+```text
++98 Git HEAD symbolic reference
+ +4 Content-Type text/plain
+ +5 Response berbeda dari baseline
+-30 Response terlalu mirip baseline
+```
+
+Level:
+
+- `HIGH`: 85–100
+- `MEDIUM`: 60–84
+- `LOW`: 0–59
+
+## Network error taxonomy
+
+Klasifikasi yang tersedia mencakup:
+
+```text
+dns_no_record
+dns_error
+connect_timeout
+read_timeout
+tls_error
+tls_hostname_mismatch
+connection_refused
+connection_reset
+proxy_error
+unsupported_protocol
+redirect_loop
+body_too_large
+network_error
+```
+
+## Historical comparison
 
 ```bash
-jq 'select(.classification=="confirmed_exposure")' reports/*/results.jsonl
+gea \
+  --mode best-practice \
+  --domain example.com \
+  --authorized \
+  --compare-report reports/previous-run \
+  --report-dir reports/current-run
 ```
 
-Exit code untuk pipeline:
+Hasil perubahan ditulis ke `comparison.json`.
+
+## Local report explainer
 
 ```bash
-gea --mode medium --domain example.com --fail-on-findings
+gea explain --report-dir reports/example
 ```
 
-- `0`: selesai normal.
-- `10`: ditemukan confirmed/probable exposure.
-- `1`: konfigurasi atau eksekusi gagal.
+Explainer ini deterministic dan berjalan lokal. Tidak mengirim report, target, atau evidence ke API AI eksternal.
 
-## Pengujian lokal
+## Fail on findings
 
 ```bash
-./tests/syntax.sh
-./tests/input.sh
-./tests/integration.sh
+gea \
+  --mode best-practice \
+  --domain example.com \
+  --authorized \
+  --fail-on-findings
 ```
 
-Status pengujian RC ini menjelaskan test lokal/CI, bukan jaminan kompatibilitas dengan seluruh konfigurasi internet. Lihat `docs/COMPATIBILITY.md`.
+Exit code `10` diberikan ketika terdapat `valid_exposure` atau `potential_exposure`.
 
-## Dokumentasi
+## Testing
 
-- `docs/ARCHITECTURE.md`
-- `docs/COMPATIBILITY.md`
-- `docs/SAFETY.md`
-- `docs/SUPPORT.md`
-- `docs/TESTING.md`
-- `docs/CHANGELOG.md`
-- `PUSH_TO_GITHUB.md`
+```bash
+./tests/run_all.sh
+```
+
+Test suite mencakup:
+
+- syntax Bash/Python;
+- scope include/exclude;
+- policy gate;
+- redaction;
+- Git signature;
+- network error taxonomy;
+- adaptive phase stop;
+- full-scan override;
+- resume tanpa duplikasi;
+- host aggregation;
+- report compatibility;
+- authorized-advanced metadata;
+- local explainer.
+
+Lihat `docs/TESTING.md` untuk status yang telah benar-benar diuji.

@@ -2,21 +2,26 @@
 
 ## Development rules
 
-- Keep requests non-destructive and bounded.
-- Do not add dumping, secret extraction, authentication/WAF bypass, brute force, or exploit chaining.
-- New classification logic must include a fixture or integration assertion.
-- Do not persist raw response bodies.
-- Preserve direct input and scope validation behavior.
+- Keep requests non-destructive, bounded, and scope-aware.
+- Do not add repository dumping, secret extraction, credential testing, automatic auth/WAF bypass, brute force, DoS, or exploit chaining.
+- Every classification or expansion change must include a unit or integration fixture.
+- Preserve host-level aggregation and compatibility report names.
+- Persisted evidence must be redacted.
+- Explicit scope must never be widened silently by target input.
+- Core classification must remain deterministic.
 
 ## Local checks
 
 ```bash
-shellcheck -S error -x bin/gea lib/*.sh scripts/*.sh tests/*.sh install.sh
-./tests/syntax.sh
-./tests/input.sh
-./tests/integration.sh
+./tests/run_all.sh
+```
+
+Optional:
+
+```bash
+shellcheck -S error -x bin/gea scripts/*.sh tests/*.sh install.sh
 ```
 
 ## Versioning
 
-Use Semantic Versioning. Release Candidate tags use `vX.Y.Z-rcN`. Do not use an LTS label unless `docs/SUPPORT.md` explicitly defines the support window and the compatibility quality gate has passed.
+Use Semantic Versioning. Release Candidate tags use `vX.Y.Z-rcN`. Do not use an LTS label until the documented quality gate has passed.

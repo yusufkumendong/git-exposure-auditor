@@ -1,44 +1,53 @@
-# Testing Status — 3.1.0-rc1
+# Testing Status — 3.2.0-rc1
 
-Tanggal pengujian lokal: 2026-08-03
+Tanggal pengujian lokal: **2026-08-04**
 
-Environment:
+Environment build:
 
 ```text
 GNU Bash 5.2.37
-curl 8.10.1 (HTTP/2 enabled)
+curl 8.10.1
 Python 3.13.5
-jq 1.7
+Linux x86_64
 ```
 
-Hasil:
+Hasil lokal:
 
 ```text
-Syntax test                 PASS
-Python compile test         PASS
-Direct input parser test    PASS
-Integration classification  PASS
-Direct --domain test        PASS
-Direct --subdomain test     PASS
-Direct --wildcard test      PASS
+Syntax Bash                 PASS
+Python compile              PASS
+Unit test                   PASS
+Integration test            PASS
+Adaptive phase stop         PASS
+Full-scan override          PASS
+Resume without duplication  PASS
+Host aggregation            PASS
+Report compatibility        PASS
+Authorized policy gate      PASS
+Local report explainer      PASS
 ```
 
-Integration fixture mencakup:
+Fixture mencakup:
 
 - valid Git HEAD;
 - valid branch ref;
-- valid Git index DIRC;
+- valid Git index `DIRC`;
 - SPA fallback HTTP 200;
 - protected HTTP 404;
-- Cloudflare-like HTTP 403 challenge;
-- HTTP 429 rate limit;
-- HTTP 503 upstream error dan retry.
+- Cloudflare-like HTTP 403;
+- HTTP 429 dan retry;
+- HTTP 503 dan retry;
+- clean host yang berhenti setelah Tier 1;
+- authorized-advanced policy metadata;
+- scope include/exclude;
+- evidence redaction;
+- network error mapping unit test.
 
-Belum diklaim lulus secara lokal:
+Belum diklaim lulus lokal:
 
-- ShellCheck (dikonfigurasi pada GitHub Actions, tetapi binary tidak tersedia pada environment build lokal);
-- seluruh matrix container GitHub Actions;
-- live compatibility terhadap semua WAF/CDN/proxy/custom error page;
+- GitHub Actions container matrix sebelum workflow benar-benar dijalankan di GitHub;
+- ShellCheck karena binary tidak tersedia pada environment build ini;
+- live compatibility terhadap seluruh WAF/CDN/proxy di internet;
 - LTS qualification.
 
-Status test ini membuktikan fixture dan jalur eksekusi yang disebutkan, bukan jaminan bahwa semua target internet akan memberikan klasifikasi sempurna.
+Test dilakukan terhadap mock server lokal. Tidak ada target internet yang dipindai selama proses build ini.

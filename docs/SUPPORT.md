@@ -1,12 +1,12 @@
 # Support Policy
 
-## 3.1.0-rc1
+## 3.2.0-rc1
 
 - Channel: Release Candidate.
-- Tujuan: validasi fitur dan compatibility feedback.
+- Tujuan: regression testing, compatibility feedback, dan stabilisasi adaptive engine.
 - Tidak memiliki janji LTS.
-- Security issue dapat dilaporkan melalui GitHub Security Advisory atau petunjuk pada `SECURITY.md`.
+- Security issue pada source dilaporkan melalui GitHub Security Advisory.
 
-## Rencana stable
+## Stable plan
 
-`3.1.x` stable akan menerima bug fix dan security fix sesuai kemampuan maintainer. Label LTS akan diumumkan terpisah setelah quality gate terpenuhi; label tidak berlaku retroaktif hanya karena nomor versi stabil.
+`3.2.x` stable direncanakan menerima bug fix dan security fix sesuai kemampuan maintainer. Label LTS diumumkan terpisah setelah quality gate pada `docs/COMPATIBILITY.md` terpenuhi.

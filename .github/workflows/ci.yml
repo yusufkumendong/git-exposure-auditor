@@ -13,15 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y curl jq python3 shellcheck
+        run: sudo apt-get update && sudo apt-get install -y curl python3 shellcheck
       - name: ShellCheck
-        run: shellcheck -S error -x bin/gea lib/*.sh scripts/*.sh tests/*.sh install.sh
-      - name: Syntax
-        run: ./tests/syntax.sh
-      - name: Input tests
-        run: ./tests/input.sh
-      - name: Integration tests
-        run: ./tests/integration.sh
+        run: shellcheck -S error -x bin/gea scripts/*.sh tests/*.sh install.sh
+      - name: Test suite
+        run: ./tests/run_all.sh
 
   container-compatibility:
     runs-on: ubuntu-latest
@@ -42,14 +38,11 @@ jobs:
         run: |
           if command -v apt-get >/dev/null 2>&1; then
             apt-get update
-            DEBIAN_FRONTEND=noninteractive apt-get install -y git bash curl jq python3 ca-certificates
+            DEBIAN_FRONTEND=noninteractive apt-get install -y git bash curl python3 ca-certificates
           else
-            dnf install -y git bash curl jq python3 ca-certificates
+            dnf install -y git bash curl python3 ca-certificates
           fi
       - uses: actions/checkout@v4
       - name: Run tests
         shell: bash
-        run: |
-          ./tests/syntax.sh
-          ./tests/input.sh
-          ./tests/integration.sh
+        run: ./tests/run_all.sh

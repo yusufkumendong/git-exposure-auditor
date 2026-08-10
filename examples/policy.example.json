@@ -1,0 +1,17 @@
+{
+  "program": {
+    "name": "Example Authorized Program",
+    "policy_reference": "https://program.example/policy-snapshot-2026-08-04",
+    "authorization_confirmed": true,
+    "bypass_permission_confirmed": true
+  },
+  "permissions": {
+    "advanced_validation": true,
+    "waf_bypass_testing": true,
+    "alternate_headers": false,
+    "alternate_methods": false,
+    "rate_limit_testing": false,
+    "repository_download": false,
+    "credential_testing": false
+  }
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "endpoint": "/.git/HEAD",
+    "pattern": "^ref:\\s+refs/heads/",
+    "reason": "Custom symbolic HEAD signature",
+    "score": 95
+  }
+]

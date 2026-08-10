@@ -1,10 +1,14 @@
-# Endpoint metadata terbatas yang dipakai mode Hard/Best Practice.
-# Tidak ada recursive crawling atau repository reconstruction.
+# Smart endpoint tiers used by v3.2
+[tier1]
 /.git/HEAD
 /.git/config
+
+[tier2]
 /.git/packed-refs
+/.git/logs/HEAD
+
+[tier3]
 /.git/refs/heads/main
 /.git/refs/heads/master
-/.git/logs/HEAD
 /.git/index
 /.git/objects/info/packs
