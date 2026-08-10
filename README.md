@@ -2,7 +2,7 @@
 
 Git Exposure Auditor adalah validator exposure `.git` yang **non-destruktif, adaptive, signature-aware, scope-aware, dan rendah false positive** untuk aset yang berada dalam scope pengujian resmi.
 
-> Versi paket ini: **3.2.0-rc2**. Statusnya Release Candidate, belum LTS.
+> Versi paket ini: **3.2.0-rc4**. Statusnya Release Candidate, belum LTS.
 
 Tool tidak menganggap HTTP 200 sebagai vulnerability. Setiap respons dibandingkan dengan random-path baseline, divalidasi menggunakan signature Git, lalu diagregasi menjadi satu verdict per host.
 
@@ -87,7 +87,7 @@ GitHub Actions menguji Ubuntu 24.04, Debian 12 slim, AlmaLinux 10, Rocky Linux 9
 ## Instalasi
 
 ```bash
-git clone https://github.com/yusufkumendong/git-exposure-auditor.git
+git clone https://github.com/USERNAME/git-exposure-auditor.git
 cd git-exposure-auditor
 chmod +x install.sh
 ./install.sh

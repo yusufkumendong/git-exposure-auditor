@@ -39,9 +39,21 @@ GEA_PYTHON="$PYTHON_BIN" "$ROOT_DIR/bin/gea" --version >/dev/null
 "$PYTHON_BIN" -m py_compile "$ROOT_DIR"/gea/*.py
 
 if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
-  ln -sfn "$ROOT_DIR/bin/gea" /usr/local/bin/gea
-  echo "Installed: /usr/local/bin/gea"
+  INSTALL_ROOT="${GEA_INSTALL_ROOT:-/usr/local/lib/git-exposure-auditor}"
+  BIN_LINK="${GEA_BIN_LINK:-/usr/local/bin/gea}"
+
+  mkdir -p "$INSTALL_ROOT" "$(dirname "$BIN_LINK")"
+  rm -rf "$INSTALL_ROOT/gea" "$INSTALL_ROOT/bin"
+  cp -a "$ROOT_DIR/gea" "$INSTALL_ROOT/gea"
+  cp -a "$ROOT_DIR/bin" "$INSTALL_ROOT/bin"
+  cp -a "$ROOT_DIR/VERSION" "$INSTALL_ROOT/VERSION"
+  chmod +x "$INSTALL_ROOT/bin/gea"
+  ln -sfn "$INSTALL_ROOT/bin/gea" "$BIN_LINK"
+
+  GEA_PYTHON="$PYTHON_BIN" "$BIN_LINK" --version >/dev/null
+  echo "Installed runtime: $INSTALL_ROOT"
+  echo "Installed command: $BIN_LINK"
 else
   echo "Dependencies OK (Python: $PYTHON_BIN). Jalankan: $ROOT_DIR/bin/gea"
-  echo "Opsional: sudo ln -sfn '$ROOT_DIR/bin/gea' /usr/local/bin/gea"
+  echo "Untuk instal global: sudo ./install.sh"
 fi

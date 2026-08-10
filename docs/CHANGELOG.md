@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.2.0-rc4 — 2026-08-10
+
+- Fix global installation path resolution when `gea` is invoked through `/usr/local/bin/gea`.
+- Make `bin/gea` resolve symbolic links before calculating the project root.
+- Install a self-contained runtime under `/usr/local/lib/git-exposure-auditor` instead of depending on the source checkout remaining in place.
+- Synchronize runtime version metadata and User-Agent to `3.2.0-rc4`.
+
 ## 3.2.0-rc3
 
 - Fix Rocky Linux 9 CI failure caused by `curl-minimal` conflicting with the full `curl` RPM.
